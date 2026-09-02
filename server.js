@@ -6,6 +6,9 @@ const helmet = require("helmet");
 
 const pool = require("./config/db");
 
+const adminAuthRoutes =
+    require("./routes/admin-auth.routes");
+
 const offersRoutes =
     require("./routes/offers.routes");
 
@@ -31,7 +34,10 @@ app.use(
 app.use(helmet());
 app.use(express.urlencoded({ extended: true }));
 
-
+app.use(
+    "/api/admin/auth",
+    adminAuthRoutes
+);
 
 
 
