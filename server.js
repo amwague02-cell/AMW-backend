@@ -34,6 +34,13 @@ app.use(
 app.use(helmet());
 app.use(express.urlencoded({ extended: true }));
 
+
+app.use(express.json());
+
+
+
+
+
 app.use(
     "/api/admin/auth",
     adminAuthRoutes
@@ -42,7 +49,9 @@ app.use(
 
 
 
-app.use(express.json());
+
+
+
 
 
 
