@@ -12,6 +12,9 @@ const adminAuthRoutes =
 const offersRoutes =
     require("./routes/offers.routes");
 
+const usersRoutes =
+    require("./routes/users.routes");
+
 const app = express();
 
 const authRoutes = require("./routes/auth.routes");
@@ -107,6 +110,11 @@ app.get("/api/test-db", async (req, res) => {
 app.use(
     "/api/offers",
     offersRoutes
+);
+
+app.use(
+    "/api/admin/users",
+    usersRoutes
 );
 
 app.use(
