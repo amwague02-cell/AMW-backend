@@ -2,7 +2,7 @@
 
 const express = require("express");
 const pool = require("../config/db");
-const requireAdmin = require("../middleware/admin.auth");
+const requireAdmin = require("../middleware/admin-auth");
 
 const router = express.Router();
 
