@@ -15,6 +15,12 @@ const offersRoutes =
 const usersRoutes =
     require("./routes/users.routes");
 
+const contactRoutes =
+    require("./routes/contact.routes");
+
+const favoritesRoutes =
+    require("./routes/favorites.routes");
+
 const app = express();
 
 const authRoutes = require("./routes/auth.routes");
@@ -115,6 +121,16 @@ app.use(
 app.use(
     "/api/admin/users",
     usersRoutes
+);
+
+app.use(
+    "/api/contact",
+    contactRoutes
+);
+
+app.use(
+    "/api/favorites",
+    favoritesRoutes
 );
 
 app.use(
