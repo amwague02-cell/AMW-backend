@@ -6,7 +6,6 @@ const pool = require("../config/db");
 
 // =====================================================
 // POST /api/contact
-// Recevoir un message depuis la page Contact
 // =====================================================
 
 router.post("/", async (req, res) => {
@@ -23,7 +22,10 @@ router.post("/", async (req, res) => {
         } = req.body;
 
 
-        // Vérification
+        // =================================================
+        // VALIDATION
+        // =================================================
+
         if (
             !firstName ||
             !lastName ||
@@ -34,38 +36,51 @@ router.post("/", async (req, res) => {
 
             return res.status(400).json({
                 success: false,
-                message: "Tous les champs obligatoires doivent être remplis."
+                message:
+                    "Tous les champs obligatoires doivent être remplis."
             });
 
         }
 
 
-        // Enregistrement dans PostgreSQL
+        // =================================================
+        // NOM COMPLET
+        // =================================================
+
+        const fullName =
+            `${firstName} ${lastName}`.trim();
+
+
+        // =================================================
+        // ENREGISTREMENT POSTGRESQL
+        // =================================================
 
         const result = await pool.query(
             `
             INSERT INTO contact_messages
             (
-                first_name,
-                last_name,
+                name,
                 email,
                 phone,
                 subject,
                 message
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING *
             `,
             [
-                firstName,
-                lastName,
+                fullName,
                 email,
-                phone || null,
+                phone ,
                 subject,
                 message
             ]
         );
 
+
+        // =================================================
+        // RESPONSE
+        // =================================================
 
         res.status(201).json({
 
