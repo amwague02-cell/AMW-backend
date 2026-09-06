@@ -79,14 +79,35 @@ router.get("/", authenticateToken, async (req, res) => {
                 f.id AS favorite_id,
                 f.created_at,
 
-                o.*
+                o.*,
+
+                COALESCE(
+                    JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'id', oi.id,
+                            'image_url', oi.image_url,
+                            'is_main', oi.is_main,
+                            'sort_order', oi.sort_order
+                        )
+                        ORDER BY oi.is_main DESC, oi.sort_order ASC
+                    ) FILTER (WHERE oi.id IS NOT NULL),
+                    '[]'
+                ) AS images
 
             FROM favorites f
 
             INNER JOIN offers o
                 ON o.id = f.offer_id
 
+            LEFT JOIN offer_images oi
+                ON oi.offer_id = o.id
+
             WHERE f.user_id = $1
+
+            GROUP BY
+                f.id,
+                f.created_at,
+                o.id
 
             ORDER BY f.created_at DESC
             `,
