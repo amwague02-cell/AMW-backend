@@ -3,15 +3,63 @@ const router = express.Router();
 
 const pool = require("../config/db");
 
-const authMiddleware = require("../middleware/auth");
+const jwt = require("jsonwebtoken");
 
 
+// =====================================================
+// AUTHENTICATION
+// =====================================================
+
+function authenticateToken(req, res, next) {
+
+    const authHeader =
+        req.headers.authorization;
+
+    const token =
+        authHeader &&
+        authHeader.startsWith("Bearer ")
+            ? authHeader.split(" ")[1]
+            : null;
+
+
+    if (!token) {
+
+        return res.status(401).json({
+            success: false,
+            message: "Veuillez vous connecter."
+        });
+
+    }
+
+
+    jwt.verify(
+        token,
+        process.env.JWT_SECRET,
+        (err, user) => {
+
+            if (err) {
+
+                return res.status(403).json({
+                    success: false,
+                    message: "Session invalide."
+                });
+
+            }
+
+            req.user = user;
+
+            next();
+
+        }
+    );
+
+}
 
 /* =====================================================
    GET CART
 ===================================================== */
 
-router.get("/", authMiddleware, async (req, res) => {
+router.get("/", authenticateToken, async (req, res) => {
 
     try {
 
@@ -84,7 +132,7 @@ router.get("/", authMiddleware, async (req, res) => {
    ADD TO CART
 ===================================================== */
 
-router.post("/", authMiddleware, async (req, res) => {
+router.post("/", authenticateToken, async (req, res) => {
 
     try {
 
@@ -164,7 +212,7 @@ router.post("/", authMiddleware, async (req, res) => {
    UPDATE QUANTITY
 ===================================================== */
 
-router.put("/:offerId", authMiddleware, async (req, res) => {
+router.put("/:offerId", authenticateToken, async (req, res) => {
 
     try {
 
@@ -250,7 +298,7 @@ router.put("/:offerId", authMiddleware, async (req, res) => {
    REMOVE ONE PRODUCT
 ===================================================== */
 
-router.delete("/:offerId", authMiddleware, async (req, res) => {
+router.delete("/:offerId", authenticateToken, async (req, res) => {
 
     try {
 
@@ -299,7 +347,7 @@ router.delete("/:offerId", authMiddleware, async (req, res) => {
    CLEAR CART
 ===================================================== */
 
-router.delete("/", authMiddleware, async (req, res) => {
+router.delete("/", authenticateToken, async (req, res) => {
 
     try {
 
