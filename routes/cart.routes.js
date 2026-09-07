@@ -21,7 +21,6 @@ function authenticateToken(req, res, next) {
             ? authHeader.split(" ")[1]
             : null;
 
-
     if (!token) {
 
         return res.status(401).json({
@@ -30,7 +29,6 @@ function authenticateToken(req, res, next) {
         });
 
     }
-
 
     jwt.verify(
         token,
@@ -54,6 +52,7 @@ function authenticateToken(req, res, next) {
     );
 
 }
+
 
 /* =====================================================
    GET CART
