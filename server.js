@@ -23,6 +23,8 @@ const favoritesRoutes =
 
 const app = express();
 
+const cartRoutes = require("./routes/cart.routes");
+
 const authRoutes = require("./routes/auth.routes");
 
 // =========================================================
@@ -54,14 +56,6 @@ app.use(
     "/api/admin/auth",
     adminAuthRoutes
 );
-
-
-
-
-
-
-
-
 
 
 // =========================================================
@@ -131,6 +125,11 @@ app.use(
 app.use(
     "/api/favorites",
     favoritesRoutes
+);
+
+app.use(
+    "/api/cart", 
+    cartRoutes
 );
 
 app.use(
