@@ -124,7 +124,18 @@ router.post(
                     c.quantity,
                     o.product_name,
                     o.new_price,
-                    o.image_url
+                    COALESCE(
+                        (
+                            SELECT oi.image_url
+                            FROM offer_images oi
+                            WHERE oi.offer_id = o.id
+                            ORDER BY
+                                oi.is_main DESC,
+                                oi.sort_order ASC
+                            LIMIT 1
+                        ),
+                        'amw.png'
+                    ) AS image_url
                 FROM cart_items c
 
                 INNER JOIN offers o
