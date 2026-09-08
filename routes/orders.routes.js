@@ -3,8 +3,50 @@ const router = express.Router();
 
 const pool = require("../config/db");
 
-const authenticateToken =
-    require("../middleware/authenticateToken");
+const jwt = require("jsonwebtoken");
+
+function authenticateToken(req, res, next) {
+
+    const authHeader =
+        req.headers.authorization;
+
+    const token =
+        authHeader &&
+        authHeader.startsWith("Bearer ")
+            ? authHeader.split(" ")[1]
+            : null;
+
+    if (!token) {
+
+        return res.status(401).json({
+            success: false,
+            message: "Veuillez vous connecter."
+        });
+
+    }
+
+    jwt.verify(
+        token,
+        process.env.JWT_SECRET,
+        (err, user) => {
+
+            if (err) {
+
+                return res.status(403).json({
+                    success: false,
+                    message: "Session invalide."
+                });
+
+            }
+
+            req.user = user;
+
+            next();
+
+        }
+    );
+
+}
 
 
 /* =====================================================
