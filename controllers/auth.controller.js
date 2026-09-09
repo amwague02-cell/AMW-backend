@@ -6,7 +6,7 @@ const crypto = require("crypto");
 
 const jwt = require("jsonwebtoken");
 
-const cloudinary = require("../config/cloudinary");
+const cloudinary = require("../services/cloudinary.service");
 
 const streamifier = require("streamifier");
 
