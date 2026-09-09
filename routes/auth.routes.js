@@ -7,6 +7,8 @@ const {
     authenticate
 } = require("../middleware/auth.middleware");
 
+const upload = require("../middleware/upload.middleware");
+
 
 const {
     register,
@@ -16,7 +18,8 @@ const {
     resetPassword,
     getProfile,
     updateProfile,
-    changePassword
+    changePassword,
+    uploadProfileImage
 } = require("../controllers/auth.controller");
 
 
@@ -100,6 +103,13 @@ router.put(
     "/change-password",
     authenticate,
     changePassword
+);
+
+router.post(
+    "/profile/image",
+    authenticate,
+    upload.single("profileImage"),
+    uploadProfileImage
 );
 
 

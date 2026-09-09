@@ -6,6 +6,10 @@ const crypto = require("crypto");
 
 const jwt = require("jsonwebtoken");
 
+const cloudinary = require("../config/cloudinary");
+
+const streamifier = require("streamifier");
+
 const {
     sendPasswordResetCode
 } = require("../services/email.service");
@@ -988,6 +992,157 @@ exports.resetPassword = async (req, res) => {
 
             message:
                 "Erreur lors de la modification."
+
+        });
+
+    }
+
+};
+
+/* =====================================================
+   UPLOAD PROFILE IMAGE
+===================================================== */
+
+exports.uploadProfileImage = async (req, res) => {
+
+    try {
+
+        if (!req.file) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Aucune image sélectionnée."
+
+            });
+
+        }
+
+
+        /*
+         * Upload vers Cloudinary
+         */
+
+        const uploadResult =
+            await new Promise((resolve, reject) => {
+
+                const stream =
+                    cloudinary.uploader.upload_stream(
+
+                        {
+                            folder: "amw/profiles",
+
+                            resource_type: "image",
+
+                            transformation: [
+                                {
+                                    width: 500,
+                                    height: 500,
+                                    crop: "fill",
+                                    gravity: "face"
+                                }
+                            ]
+                        },
+
+                        (error, result) => {
+
+                            if (error) {
+
+                                reject(error);
+
+                            } else {
+
+                                resolve(result);
+
+                            }
+
+                        }
+
+                    );
+
+
+                streamifier
+                    .createReadStream(req.file.buffer)
+                    .pipe(stream);
+
+            });
+
+
+        /*
+         * Enregistrer l'URL dans PostgreSQL
+         */
+
+        const result =
+            await pool.query(
+
+                `
+                UPDATE users
+
+                SET
+                    profile_image = $1,
+                    updated_at = NOW()
+
+                WHERE id = $2
+
+                RETURNING
+                    id,
+                    profile_image
+                `,
+
+                [
+
+                    uploadResult.secure_url,
+
+                    req.user.id
+
+                ]
+
+            );
+
+
+        if (result.rows.length === 0) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message:
+                    "Utilisateur introuvable."
+
+            });
+
+        }
+
+
+        res.json({
+
+            success: true,
+
+            message:
+                "Photo de profil mise à jour avec succès.",
+
+            profileImage:
+                result.rows[0].profile_image
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "UPLOAD PROFILE IMAGE ERROR:",
+            error
+        );
+
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                "Erreur lors de l'enregistrement de la photo."
 
         });
 
