@@ -994,3 +994,398 @@ exports.resetPassword = async (req, res) => {
     }
 
 };
+
+/* =====================================================
+   GET MY PROFILE
+===================================================== */
+
+exports.getProfile = async (req, res) => {
+
+    try {
+
+        const result = await pool.query(
+
+            `
+            SELECT
+                id,
+                full_name,
+                email,
+                phone,
+                role,
+                profile_image,
+                gender,
+                address,
+                created_at,
+                updated_at
+
+            FROM users
+
+            WHERE id = $1
+
+            LIMIT 1
+            `,
+
+            [req.user.id]
+
+        );
+
+
+        if (result.rows.length === 0) {
+
+            return res.status(404).json({
+
+                message: "Utilisateur introuvable."
+
+            });
+
+        }
+
+
+        const user = result.rows[0];
+
+
+        res.json({
+
+            user: {
+
+                id: user.id,
+
+                fullName: user.full_name,
+
+                email: user.email,
+
+                phone: user.phone,
+
+                role: user.role,
+
+                profileImage: user.profile_image,
+
+                gender: user.gender,
+
+                address: user.address,
+
+                createdAt: user.created_at,
+
+                updatedAt: user.updated_at
+
+            }
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "GET PROFILE ERROR:",
+            error
+        );
+
+
+        res.status(500).json({
+
+            message:
+                "Erreur lors du chargement du profil."
+
+        });
+
+    }
+
+};
+
+
+/* =====================================================
+   UPDATE MY PROFILE
+===================================================== */
+
+exports.updateProfile = async (req, res) => {
+
+    try {
+
+        const {
+            fullName,
+            phone,
+            gender,
+            address
+        } = req.body;
+
+
+        if (!fullName || !fullName.trim()) {
+
+            return res.status(400).json({
+
+                message:
+                    "Le nom complet est obligatoire."
+
+            });
+
+        }
+
+
+        const result = await pool.query(
+
+            `
+            UPDATE users
+
+            SET
+                full_name = $1,
+                phone = $2,
+                gender = $3,
+                address = $4,
+                updated_at = NOW()
+
+            WHERE id = $5
+
+            RETURNING
+                id,
+                full_name,
+                email,
+                phone,
+                role,
+                profile_image,
+                gender,
+                address,
+                created_at,
+                updated_at
+            `,
+
+            [
+
+                fullName.trim(),
+
+                phone
+                    ? phone.trim()
+                    : null,
+
+                gender
+                    ? gender.trim()
+                    : null,
+
+                address
+                    ? address.trim()
+                    : null,
+
+                req.user.id
+
+            ]
+
+        );
+
+
+        if (result.rows.length === 0) {
+
+            return res.status(404).json({
+
+                message:
+                    "Utilisateur introuvable."
+
+            });
+
+        }
+
+
+        const user = result.rows[0];
+
+
+        res.json({
+
+            message:
+                "Profil mis à jour avec succès.",
+
+            user: {
+
+                id: user.id,
+
+                fullName: user.full_name,
+
+                email: user.email,
+
+                phone: user.phone,
+
+                role: user.role,
+
+                profileImage: user.profile_image,
+
+                gender: user.gender,
+
+                address: user.address,
+
+                createdAt: user.created_at,
+
+                updatedAt: user.updated_at
+
+            }
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "UPDATE PROFILE ERROR:",
+            error
+        );
+
+
+        res.status(500).json({
+
+            message:
+                "Erreur lors de la mise à jour du profil."
+
+        });
+
+    }
+
+};
+
+
+/* =====================================================
+   CHANGE PASSWORD
+===================================================== */
+
+exports.changePassword = async (req, res) => {
+
+    try {
+
+        const {
+            currentPassword,
+            newPassword
+        } = req.body;
+
+
+        if (
+            !currentPassword ||
+            !newPassword
+        ) {
+
+            return res.status(400).json({
+
+                message:
+                    "Tous les champs sont obligatoires."
+
+            });
+
+        }
+
+
+        if (newPassword.length < 6) {
+
+            return res.status(400).json({
+
+                message:
+                    "Le nouveau mot de passe doit contenir au moins 6 caractères."
+
+            });
+
+        }
+
+
+        const result = await pool.query(
+
+            `
+            SELECT password_hash
+
+            FROM users
+
+            WHERE id = $1
+
+            LIMIT 1
+            `,
+
+            [req.user.id]
+
+        );
+
+
+        if (result.rows.length === 0) {
+
+            return res.status(404).json({
+
+                message:
+                    "Utilisateur introuvable."
+
+            });
+
+        }
+
+
+        const passwordValid =
+            await bcrypt.compare(
+
+                currentPassword,
+
+                result.rows[0].password_hash
+
+            );
+
+
+        if (!passwordValid) {
+
+            return res.status(401).json({
+
+                message:
+                    "L'ancien mot de passe est incorrect."
+
+            });
+
+        }
+
+
+        const newPasswordHash =
+            await bcrypt.hash(
+
+                newPassword,
+
+                12
+
+            );
+
+
+        await pool.query(
+
+            `
+            UPDATE users
+
+            SET
+                password_hash = $1,
+                updated_at = NOW()
+
+            WHERE id = $2
+            `,
+
+            [
+
+                newPasswordHash,
+
+                req.user.id
+
+            ]
+
+        );
+
+
+        res.json({
+
+            message:
+                "Mot de passe modifié avec succès."
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "CHANGE PASSWORD ERROR:",
+            error
+        );
+
+
+        res.status(500).json({
+
+            message:
+                "Erreur lors de la modification du mot de passe."
+
+        });
+
+    }
+
+};

@@ -4,11 +4,19 @@ const router = express.Router();
 
 
 const {
+    authenticate
+} = require("../middleware/auth.middleware");
+
+
+const {
     register,
     login,
     forgotPassword,
     verifyResetCode,
-    resetPassword
+    resetPassword,
+    getProfile,
+    updateProfile,
+    changePassword
 } = require("../controllers/auth.controller");
 
 
@@ -60,6 +68,38 @@ router.post(
 router.post(
     "/reset-password",
     resetPassword
+);
+
+/* =====================================================
+   GET MY PROFILE
+===================================================== */
+
+router.get(
+    "/profile",
+    authenticate,
+    getProfile
+);
+
+
+/* =====================================================
+   UPDATE MY PROFILE
+===================================================== */
+
+router.put(
+    "/profile",
+    authenticate,
+    updateProfile
+);
+
+
+/* =====================================================
+   CHANGE PASSWORD
+===================================================== */
+
+router.put(
+    "/change-password",
+    authenticate,
+    changePassword
 );
 
 
