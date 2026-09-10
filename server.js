@@ -29,6 +29,10 @@ const ordersRoutes =
 const adminDashboardRoutes =
     require("./routes/admin-dashboard.routes");
 
+const adminOrdersRoutes =
+    require("./routes/admin-orders.routes");
+
+
 
 
 const cartRoutes = require("./routes/cart.routes");
@@ -148,6 +152,11 @@ app.use(
 app.use(
     "/api/admin/dashboard",
     adminDashboardRoutes
+);
+
+app.use(
+    "/api/admin/orders",
+    adminOrdersRoutes
 );
 
 app.use(
