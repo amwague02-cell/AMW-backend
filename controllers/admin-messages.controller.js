@@ -13,16 +13,17 @@ async function getAdminMessages(req, res) {
     try {
 
         const result = await pool.query(`
-            
+
             SELECT
+
                 'contact' AS type,
 
                 'contact-' || c.id AS id,
 
                 c.id AS source_id,
 
-                c.first_name,
-                c.last_name,
+                c.name AS name,
+
                 c.email,
                 c.phone,
 
@@ -54,8 +55,8 @@ async function getAdminMessages(req, res) {
 
                 n.id AS source_id,
 
-                u.first_name,
-                u.last_name,
+                u.full_name AS name,
+
                 u.email,
                 u.phone,
 
@@ -119,8 +120,7 @@ async function getAdminMessages(req, res) {
 
 
 // =====================================================
-// MARK AS READ
-// PATCH /api/admin/messages/:id/read
+// MARK MESSAGE AS READ
 // =====================================================
 
 async function markMessageAsRead(req, res) {
@@ -129,8 +129,6 @@ async function markMessageAsRead(req, res) {
 
         const { id } = req.params;
 
-
-        // CONTACT
 
         if (id.startsWith("contact-")) {
 
@@ -151,8 +149,6 @@ async function markMessageAsRead(req, res) {
 
         }
 
-
-        // NEGOTIATION
 
         else if (id.startsWith("negotiation-")) {
 
@@ -206,8 +202,7 @@ async function markMessageAsRead(req, res) {
 
 
 // =====================================================
-// MARK AS REPLIED
-// PATCH /api/admin/messages/:id/reply
+// MARK MESSAGE AS REPLIED
 // =====================================================
 
 async function markMessageAsReplied(req, res) {
@@ -221,8 +216,6 @@ async function markMessageAsReplied(req, res) {
             channel
         } = req.body;
 
-
-        // CONTACT
 
         if (id.startsWith("contact-")) {
 
@@ -249,8 +242,6 @@ async function markMessageAsReplied(req, res) {
 
         }
 
-
-        // NEGOTIATION
 
         else if (id.startsWith("negotiation-")) {
 
@@ -314,7 +305,6 @@ async function markMessageAsReplied(req, res) {
 
 // =====================================================
 // DELETE MESSAGE
-// DELETE /api/admin/messages/:id
 // =====================================================
 
 async function deleteAdminMessage(req, res) {
@@ -323,8 +313,6 @@ async function deleteAdminMessage(req, res) {
 
         const { id } = req.params;
 
-
-        // CONTACT
 
         if (id.startsWith("contact-")) {
 
@@ -335,6 +323,7 @@ async function deleteAdminMessage(req, res) {
             await pool.query(
                 `
                 DELETE FROM contact_messages
+
                 WHERE id = $1
                 `,
                 [sourceId]
@@ -342,8 +331,6 @@ async function deleteAdminMessage(req, res) {
 
         }
 
-
-        // NEGOTIATION
 
         else if (id.startsWith("negotiation-")) {
 
@@ -354,6 +341,7 @@ async function deleteAdminMessage(req, res) {
             await pool.query(
                 `
                 DELETE FROM negotiation_requests
+
                 WHERE id = $1
                 `,
                 [sourceId]
@@ -392,6 +380,10 @@ async function deleteAdminMessage(req, res) {
 
 }
 
+
+// =====================================================
+// EXPORTS
+// =====================================================
 
 module.exports = {
 

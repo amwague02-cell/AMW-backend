@@ -46,27 +46,35 @@ router.post("/", async (req, res) => {
 
 
         // =================================================
-        // INSERT
+        // FULL NAME
+        // =================================================
+
+        const fullName =
+            `${firstName} ${lastName}`.trim();
+
+
+        // =================================================
+        // SAVE MESSAGE
         // =================================================
 
         const result = await pool.query(
             `
             INSERT INTO contact_messages
             (
-                first_name,
-                last_name,
+                name,
                 email,
                 phone,
                 subject,
                 message,
                 status
             )
-            VALUES ($1, $2, $3, $4, $5, $6, 'unread')
+            VALUES
+            ($1, $2, $3, $4, $5, 'unread')
+
             RETURNING *
             `,
             [
-                firstName.trim(),
-                lastName.trim(),
+                fullName,
                 email.trim(),
                 phone ? phone.trim() : null,
                 subject.trim(),

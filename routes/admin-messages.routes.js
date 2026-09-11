@@ -8,22 +8,14 @@ const requireAdmin =
     require("../middleware/admin-auth");
 
 const {
-
     getAdminMessages,
-
     markMessageAsRead,
-
     markMessageAsReplied,
-
     deleteAdminMessage
-
 } = require("../controllers/admin-messages.controller");
 
 
-// =====================================================
-// GET ALL
-// =====================================================
-
+// GET ALL MESSAGES
 router.get(
     "/",
     requireAdmin,
@@ -31,10 +23,7 @@ router.get(
 );
 
 
-// =====================================================
-// READ
-// =====================================================
-
+// MARK AS READ
 router.patch(
     "/:id/read",
     requireAdmin,
@@ -42,10 +31,7 @@ router.patch(
 );
 
 
-// =====================================================
-// REPLY
-// =====================================================
-
+// MARK AS REPLIED
 router.patch(
     "/:id/reply",
     requireAdmin,
@@ -53,10 +39,7 @@ router.patch(
 );
 
 
-// =====================================================
 // DELETE
-// =====================================================
-
 router.delete(
     "/:id",
     requireAdmin,
