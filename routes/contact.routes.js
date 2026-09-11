@@ -1,3 +1,5 @@
+"use strict";
+
 const express = require("express");
 const router = express.Router();
 
@@ -44,36 +46,31 @@ router.post("/", async (req, res) => {
 
 
         // =================================================
-        // NOM COMPLET
-        // =================================================
-
-        const fullName =
-            `${firstName} ${lastName}`.trim();
-
-
-        // =================================================
-        // ENREGISTREMENT POSTGRESQL
+        // INSERT
         // =================================================
 
         const result = await pool.query(
             `
             INSERT INTO contact_messages
             (
-                name,
+                first_name,
+                last_name,
                 email,
                 phone,
                 subject,
-                message
+                message,
+                status
             )
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, $3, $4, $5, $6, 'unread')
             RETURNING *
             `,
             [
-                fullName,
-                email,
-                phone ,
-                subject,
-                message
+                firstName.trim(),
+                lastName.trim(),
+                email.trim(),
+                phone ? phone.trim() : null,
+                subject.trim(),
+                message.trim()
             ]
         );
 
@@ -82,7 +79,7 @@ router.post("/", async (req, res) => {
         // RESPONSE
         // =================================================
 
-        res.status(201).json({
+        return res.status(201).json({
 
             success: true,
 
@@ -102,7 +99,7 @@ router.post("/", async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
 
             success: false,
 
