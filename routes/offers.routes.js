@@ -5,12 +5,16 @@ const router = express.Router();
 const upload =
     require("../middleware/upload.middleware");
 
+const requireAdmin =
+    require("../middleware/admin-auth");
 
 const {
     createOffer,
     getOffers,
     getOfferById,
-    getCategories
+    getCategories,
+    updateOffer,
+    deleteOffer
 } = require("../controllers/offers.controller");
 
 
@@ -52,6 +56,28 @@ router.post(
 router.get(
     "/:id",
     getOfferById
+);
+
+
+/* =====================================================
+   UPDATE OFFER — ADMIN
+===================================================== */
+
+router.put(
+    "/:id",
+    requireAdmin,
+    updateOffer
+);
+
+
+/* =====================================================
+   DELETE OFFER — ADMIN + PASSWORD
+===================================================== */
+
+router.delete(
+    "/:id",
+    requireAdmin,
+    deleteOffer
 );
 
 

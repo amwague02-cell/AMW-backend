@@ -1,6 +1,7 @@
 const pool = require("../config/db");
 const cloudinary = require("../services/cloudinary.service");
 const { Readable } = require("stream");
+const bcrypt = require("bcrypt");
 
 
 function generateReference(id) {
@@ -499,12 +500,317 @@ async function getCategories(req, res) {
 
 
 
+/* =====================================================
+   UPDATE OFFER
+===================================================== */
 
+async function updateOffer(req, res) {
+
+    const client = await pool.connect();
+
+    try {
+
+        const { id } = req.params;
+
+        const {
+            product_name,
+            category,
+            description,
+            old_price,
+            discount,
+            new_price,
+            quantity,
+            status
+        } = req.body;
+
+
+        if (!product_name || !category || !new_price) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Informations obligatoires manquantes."
+            });
+
+        }
+
+
+        const existingOffer =
+            await client.query(
+                `
+                SELECT id
+                FROM offers
+                WHERE id = $1
+                `,
+                [id]
+            );
+
+
+        if (existingOffer.rows.length === 0) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Offre introuvable."
+            });
+
+        }
+
+
+        const result =
+            await client.query(
+                `
+                UPDATE offers
+
+                SET
+                    product_name = $1,
+                    category = $2,
+                    description = $3,
+                    old_price = $4,
+                    discount = $5,
+                    new_price = $6,
+                    quantity = $7,
+                    status = $8
+
+                WHERE id = $9
+
+                RETURNING
+                    id,
+                    reference,
+                    product_name,
+                    category,
+                    description,
+                    old_price,
+                    discount,
+                    new_price,
+                    quantity,
+                    status,
+                    created_at
+                `,
+                [
+                    product_name,
+                    category,
+                    description || "",
+                    old_price || null,
+                    discount || 0,
+                    new_price,
+                    quantity || 0,
+                    status || "active",
+                    id
+                ]
+            );
+
+
+        return res.json({
+            success: true,
+            message: "Offre modifiée avec succès.",
+            offer: result.rows[0]
+        });
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "❌ Update offer error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Erreur lors de la modification de l'offre."
+        });
+
+    }
+
+    finally {
+
+        client.release();
+
+    }
+
+}
+
+
+/* =====================================================
+   DELETE OFFER
+===================================================== */
+
+async function deleteOffer(req, res) {
+
+    const client = await pool.connect();
+
+    try {
+
+        const { id } = req.params;
+
+        const { password } =
+            req.body;
+
+
+        if (!password) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Mot de passe administrateur requis."
+            });
+
+        }
+
+
+        /* -------------------------------------------------
+           Vérifier l'administrateur connecté
+        ------------------------------------------------- */
+
+        const adminResult =
+            await client.query(
+                `
+                SELECT
+                    id,
+                    password_hash
+                FROM admin_users
+                WHERE id = $1
+                LIMIT 1
+                `,
+                [req.admin.id]
+            );
+
+
+        if (adminResult.rows.length === 0) {
+
+            return res.status(401).json({
+                success: false,
+                message:
+                    "Administrateur introuvable."
+            });
+
+        }
+
+
+        const admin =
+            adminResult.rows[0];
+
+
+        const passwordValid =
+            await bcrypt.compare(
+                password,
+                admin.password_hash
+            );
+
+
+        if (!passwordValid) {
+
+            return res.status(401).json({
+                success: false,
+                message:
+                    "Mot de passe administrateur incorrect."
+            });
+
+        }
+
+
+        /* -------------------------------------------------
+           Vérifier l'offre
+        ------------------------------------------------- */
+
+        const offerResult =
+            await client.query(
+                `
+                SELECT id
+                FROM offers
+                WHERE id = $1
+                `,
+                [id]
+            );
+
+
+        if (offerResult.rows.length === 0) {
+
+            return res.status(404).json({
+                success: false,
+                message:
+                    "Offre introuvable."
+            });
+
+        }
+
+
+        await client.query("BEGIN");
+
+
+        /* -------------------------------------------------
+           Supprimer les images
+        ------------------------------------------------- */
+
+        await client.query(
+            `
+            DELETE FROM offer_images
+            WHERE offer_id = $1
+            `,
+            [id]
+        );
+
+
+        /* -------------------------------------------------
+           Supprimer l'offre
+        ------------------------------------------------- */
+
+        await client.query(
+            `
+            DELETE FROM offers
+            WHERE id = $1
+            `,
+            [id]
+        );
+
+
+        await client.query("COMMIT");
+
+
+        return res.json({
+            success: true,
+            message:
+                "Offre supprimée avec succès."
+        });
+
+    }
+
+    catch (error) {
+
+        try {
+            await client.query("ROLLBACK");
+        }
+        catch (_) {}
+
+
+        console.error(
+            "❌ Delete offer error:",
+            error
+        );
+
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Erreur lors de la suppression de l'offre."
+        });
+
+    }
+
+    finally {
+
+        client.release();
+
+    }
+
+}
 
 
 module.exports = {
     createOffer,
     getOffers,
     getOfferById,
-    getCategories
+    getCategories,
+    updateOffer,
+    deleteOffer
 };
