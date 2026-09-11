@@ -200,21 +200,28 @@ router.get(
 
         catch (error) {
 
-            console.error(
-                "ADMIN DASHBOARD ERROR:",
-                error
-            );
+    console.error(
+        "ADMIN DASHBOARD ERROR:",
+        error.message
+    );
 
-            res.status(500).json({
+    console.error(
+        error.stack
+    );
 
-                success: false,
+    res.status(500).json({
 
-                message:
-                    "Erreur serveur."
+        success: false,
 
-            });
+        message:
+            "Erreur lors du chargement du dashboard.",
 
-        }
+        error:
+            error.message
+
+    });
+
+}
 
     }
 );
