@@ -38,6 +38,11 @@ const negotiationsRoutes =
 const adminMessagesRoutes =
     require("./routes/admin-messages.routes");
 
+const adminAnalyticsRoutes =
+    require("./routes/admin-analytics.routes");
+
+
+
 
 
 
@@ -156,11 +161,6 @@ app.use(
 );
 
 app.use(
-    "/api/admin/dashboard",
-    adminDashboardRoutes
-);
-
-app.use(
     "/api/admin/orders",
     adminOrdersRoutes
 );
@@ -173,6 +173,16 @@ app.use(
 app.use(
     "/api/admin/messages",
     adminMessagesRoutes
+);
+
+app.use(
+    "/api/admin/dashboard",
+    adminDashboardRoutes
+);
+
+app.use(
+    "/api/admin/analytics",
+    adminAnalyticsRoutes
 );
 
 app.use(
