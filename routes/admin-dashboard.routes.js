@@ -11,6 +11,18 @@ const pool =
 const requireAdmin =
     require("../middleware/admin-auth");
 
+const {
+    getDashboardActivity
+} = require(
+    "../controllers/admin-dashboard.controller"
+);
+
+router.get(
+    "/activity",
+    requireAdmin,
+    getDashboardActivity
+);
+
 
 router.get(
     "/",
