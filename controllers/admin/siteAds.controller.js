@@ -5,6 +5,35 @@ const cloudinary = require("../../services/cloudinary.service");
 
 
 /* =========================================================
+   CLOUDINARY UPLOAD
+========================================================= */
+
+async function uploadToCloudinary(file) {
+
+    return new Promise((resolve, reject) => {
+
+        const stream = cloudinary.uploader.upload_stream(
+            {
+                folder: "amw/site-ads",
+                resource_type: "image"
+            },
+
+            (error, result) => {
+
+                if (error) {
+                    return reject(error);
+                }
+
+                resolve(result);
+            }
+        );
+
+        stream.end(file.buffer);
+    });
+}
+
+
+/* =========================================================
    GET ALL ADS — ADMIN
 ========================================================= */
 
@@ -35,17 +64,12 @@ exports.getAllAds = async (req, res) => {
 
     } catch (error) {
 
-        console.error(
-            "GET SITE ADS ERROR:",
-            error
-        );
+        console.error("GET SITE ADS ERROR:", error);
 
         res.status(500).json({
             message: "Erreur serveur."
         });
-
     }
-
 };
 
 
@@ -84,17 +108,12 @@ exports.getActiveAds = async (req, res) => {
 
     } catch (error) {
 
-        console.error(
-            "GET ACTIVE SITE ADS ERROR:",
-            error
-        );
+        console.error("GET ACTIVE SITE ADS ERROR:", error);
 
         res.status(500).json({
             message: "Erreur serveur."
         });
-
     }
-
 };
 
 
@@ -118,12 +137,11 @@ exports.createAd = async (req, res) => {
         } = req.body;
 
 
-        if (!title) {
+        if (!title || !title.trim()) {
 
             return res.status(400).json({
                 message: "Le titre est obligatoire."
             });
-
         }
 
 
@@ -132,19 +150,11 @@ exports.createAd = async (req, res) => {
             return res.status(400).json({
                 message: "L'image est obligatoire."
             });
-
         }
 
 
-        const imageUrl =
-            req.file.path ||
-            req.file.secure_url;
-
-
-        const publicId =
-            req.file.filename ||
-            req.file.public_id ||
-            null;
+        const uploadResult =
+            await uploadToCloudinary(req.file);
 
 
         const result = await pool.query(
@@ -168,7 +178,7 @@ exports.createAd = async (req, res) => {
             `,
             [
                 title.trim(),
-                imageUrl,
+                uploadResult.secure_url,
                 link_url || null,
                 Number(width) || 170,
                 Number(height) || 108,
@@ -176,28 +186,21 @@ exports.createAd = async (req, res) => {
                 is_active !== "false",
                 starts_at || null,
                 ends_at || null,
-                publicId
+                uploadResult.public_id
             ]
         );
 
 
-        res.status(201).json(
-            result.rows[0]
-        );
+        res.status(201).json(result.rows[0]);
 
     } catch (error) {
 
-        console.error(
-            "CREATE SITE AD ERROR:",
-            error
-        );
+        console.error("CREATE SITE AD ERROR:", error);
 
         res.status(500).json({
             message: "Erreur lors de la création."
         });
-
     }
-
 };
 
 
@@ -238,37 +241,29 @@ exports.updateAd = async (req, res) => {
             return res.status(404).json({
                 message: "Publicité introuvable."
             });
-
         }
 
 
-        const oldAd =
-            oldResult.rows[0];
+        const oldAd = oldResult.rows[0];
+
+        let imageUrl = oldAd.image_url;
+        let publicId = oldAd.cloudinary_public_id;
 
 
-        let imageUrl =
-            oldAd.image_url;
-
-        let publicId =
-            oldAd.cloudinary_public_id;
-
+        /* ---------- NEW IMAGE ---------- */
 
         if (req.file) {
 
-            imageUrl =
-                req.file.path ||
-                req.file.secure_url;
+            const uploadResult =
+                await uploadToCloudinary(req.file);
 
-            publicId =
-                req.file.filename ||
-                req.file.public_id ||
-                publicId;
+            imageUrl = uploadResult.secure_url;
+            publicId = uploadResult.public_id;
 
 
-            if (
-                oldAd.cloudinary_public_id &&
-                cloudinary.uploader
-            ) {
+            /* Delete old image */
+
+            if (oldAd.cloudinary_public_id) {
 
                 try {
 
@@ -282,18 +277,14 @@ exports.updateAd = async (req, res) => {
                         "Cloudinary old image deletion:",
                         cloudError.message
                     );
-
                 }
-
             }
-
         }
 
 
         const result = await pool.query(
             `
             UPDATE site_ads
-
             SET
                 title = $1,
                 image_url = $2,
@@ -306,9 +297,7 @@ exports.updateAd = async (req, res) => {
                 ends_at = $9,
                 cloudinary_public_id = $10,
                 updated_at = NOW()
-
             WHERE id = $11
-
             RETURNING *
             `,
             [
@@ -317,7 +306,7 @@ exports.updateAd = async (req, res) => {
                 link_url || null,
                 Number(width) || oldAd.width,
                 Number(height) || oldAd.height,
-                Number(display_order) || 0,
+                Number(display_order) || oldAd.display_order,
                 is_active !== "false",
                 starts_at || null,
                 ends_at || null,
@@ -327,23 +316,16 @@ exports.updateAd = async (req, res) => {
         );
 
 
-        res.json(
-            result.rows[0]
-        );
+        res.json(result.rows[0]);
 
     } catch (error) {
 
-        console.error(
-            "UPDATE SITE AD ERROR:",
-            error
-        );
+        console.error("UPDATE SITE AD ERROR:", error);
 
         res.status(500).json({
             message: "Erreur lors de la modification."
         });
-
     }
-
 };
 
 
@@ -373,18 +355,13 @@ exports.deleteAd = async (req, res) => {
             return res.status(404).json({
                 message: "Publicité introuvable."
             });
-
         }
 
 
-        const ad =
-            result.rows[0];
+        const ad = result.rows[0];
 
 
-        if (
-            ad.cloudinary_public_id &&
-            cloudinary.uploader
-        ) {
+        if (ad.cloudinary_public_id) {
 
             try {
 
@@ -398,9 +375,7 @@ exports.deleteAd = async (req, res) => {
                     "Cloudinary deletion:",
                     cloudError.message
                 );
-
             }
-
         }
 
 
@@ -411,15 +386,10 @@ exports.deleteAd = async (req, res) => {
 
     } catch (error) {
 
-        console.error(
-            "DELETE SITE AD ERROR:",
-            error
-        );
+        console.error("DELETE SITE AD ERROR:", error);
 
         res.status(500).json({
             message: "Erreur lors de la suppression."
         });
-
     }
-
 };

@@ -1,51 +1,46 @@
 "use strict";
 
 const express = require("express");
+const router = express.Router();
 
-const router =
-    express.Router();
+const {
+    authenticate,
+    requireAdmin
+} = require("../../middleware/auth.middleware");
 
-const authenticateToken =
-    require("../../middleware/auth.middleware");
+const upload = require("../../middleware/upload.middleware");
 
-const upload =
-    require("../../middleware/upload.middleware");
+const {
+    getAllAds,
+    createAd,
+    updateAd,
+    deleteAd
+} = require("../../controllers/admin/siteAds.controller");
 
-const controller =
-    require("../../controllers/admin/siteAds.controller");
 
-
-/* =========================================================
-   ADMIN
-========================================================= */
-
-router.get(
-    "/",
-    authenticateToken,
-    controller.getAllAds
-);
-
+router.get("/", authenticate, requireAdmin, getAllAds);
 
 router.post(
     "/",
-    authenticateToken,
+    authenticate,
+    requireAdmin,
     upload.single("image"),
-    controller.createAd
+    createAd
 );
-
 
 router.put(
     "/:id",
-    authenticateToken,
+    authenticate,
+    requireAdmin,
     upload.single("image"),
-    controller.updateAd
+    updateAd
 );
-
 
 router.delete(
     "/:id",
-    authenticateToken,
-    controller.deleteAd
+    authenticate,
+    requireAdmin,
+    deleteAd
 );
 
 
