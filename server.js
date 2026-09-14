@@ -41,6 +41,9 @@ const adminMessagesRoutes =
 const adminAnalyticsRoutes =
     require("./routes/admin-analytics.routes");
 
+const invoicesRoutes =
+    require("./routes/invoices.routes");
+
 
 
 
@@ -183,6 +186,11 @@ app.use(
 app.use(
     "/api/admin/analytics",
     adminAnalyticsRoutes
+);
+
+app.use(
+    "/api/invoices",
+    invoicesRoutes
 );
 
 app.use(
