@@ -5,6 +5,8 @@ const cors = require("cors");
 const helmet = require("helmet");
 
 const pool = require("./config/db");
+const requireAdmin =
+    require("./middleware/requireAdmin");
 
 const adminAuthRoutes =
     require("./routes/admin-auth.routes");
@@ -145,6 +147,7 @@ app.use(
 
 app.use(
     "/api/admin/users",
+    requireAdmin,
     usersRoutes
 );
 
@@ -170,6 +173,7 @@ app.use(
 
 app.use(
     "/api/admin/orders",
+    requireAdmin,
     adminOrdersRoutes
 );
 
@@ -180,16 +184,19 @@ app.use(
 
 app.use(
     "/api/admin/messages",
+    requireAdmin,
     adminMessagesRoutes
 );
 
 app.use(
     "/api/admin/dashboard",
+    requireAdmin,
     adminDashboardRoutes
 );
 
 app.use(
     "/api/admin/analytics",
+    requireAdmin,
     adminAnalyticsRoutes
 );
 
@@ -200,6 +207,7 @@ app.use(
 
 app.use(
     "/api/admin/site-ads",
+    requireAdmin,
     adminSiteAdsRoutes
 );
 

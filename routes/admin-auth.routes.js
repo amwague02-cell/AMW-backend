@@ -164,52 +164,43 @@ router.get("/me", async (req, res) => {
 
     try {
 
-        const authHeader = req.headers.authorization;
+        const authHeader =
+            req.headers.authorization;
 
-        if (!authHeader || !authHeader.startsWith("Bearer ")) {
-
+        if (
+            !authHeader ||
+            !authHeader.startsWith("Bearer ")
+        ) {
             return res.status(401).json({
                 success: false,
                 message: "Non authentifié."
             });
-
         }
 
+        const token =
+            authHeader.split(" ")[1];
 
-        const token = authHeader.split(" ")[1];
+        const decoded =
+            jwt.verify(
+                token,
+                process.env.JWT_SECRET
+            );
 
-
-        const decoded = jwt.verify(
-            token,
-            process.env.JWT_SECRET
-        );
-
-
-        if (decoded.role !== "admin") {
-
-            return res.status(403).json({
-                success: false,
-                message: "Accès administrateur requis."
-            });
-
-        }
-
-
-        const result = await pool.query(
-            `
-            SELECT
-                id,
-                username,
-                full_name,
-                is_active,
-                last_login
-            FROM admin_users
-            WHERE id = $1
-            LIMIT 1
-            `,
-            [decoded.id]
-        );
-
+        const result =
+            await pool.query(
+                `
+                SELECT
+                    id,
+                    username,
+                    full_name,
+                    is_active,
+                    last_login
+                FROM admin_users
+                WHERE id = $1
+                LIMIT 1
+                `,
+                [decoded.id]
+            );
 
         if (result.rows.length === 0) {
 
@@ -220,9 +211,8 @@ router.get("/me", async (req, res) => {
 
         }
 
-
-        const admin = result.rows[0];
-
+        const admin =
+            result.rows[0];
 
         if (!admin.is_active) {
 
@@ -232,7 +222,6 @@ router.get("/me", async (req, res) => {
             });
 
         }
-
 
         return res.json({
 
