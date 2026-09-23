@@ -59,6 +59,7 @@ async function createOffer(req, res) {
             oldPrice,
             discount,
             newPrice,
+            wholesalePrice,
             quantity,
             status
         } = req.body;
@@ -101,7 +102,7 @@ async function createOffer(req, res) {
         const offerResult = await client.query(
 
             `
-            INSERT INTO offers (
+           INSERT INTO offers (
                 reference,
                 product_name,
                 category,
@@ -109,6 +110,7 @@ async function createOffer(req, res) {
                 old_price,
                 discount,
                 new_price,
+                wholesale_price,
                 quantity,
                 status
             )
@@ -122,7 +124,8 @@ async function createOffer(req, res) {
                 $5,
                 $6,
                 $7,
-                $8
+                $8,
+                $9
             )
 
             RETURNING id
@@ -135,6 +138,7 @@ async function createOffer(req, res) {
                 oldPrice || null,
                 discount || null,
                 newPrice,
+                wholesalePrice || null,
                 quantity || 1,
                 status || "active"
             ]
@@ -299,6 +303,7 @@ async function getOffers(req, res) {
                 o.old_price,
                 o.discount,
                 o.new_price,
+                o.wholesale_price,
                 o.quantity,
                 o.status,
                 o.created_at,
@@ -369,6 +374,7 @@ async function getOfferById(req, res) {
                 o.old_price,
                 o.discount,
                 o.new_price,
+                o.wholesale_price,
                 o.quantity,
                 o.status,
                 o.created_at,
@@ -519,6 +525,7 @@ async function updateOffer(req, res) {
             old_price,
             discount,
             new_price,
+            wholesale_price,
             quantity,
             status
         } = req.body;
@@ -567,8 +574,9 @@ async function updateOffer(req, res) {
                     old_price = $4,
                     discount = $5,
                     new_price = $6,
-                    quantity = $7,
-                    status = $8
+                    wholesale_price = $7,
+                    quantity = $8,
+                    status = $9
 
                 WHERE id = $9
 
@@ -581,6 +589,7 @@ async function updateOffer(req, res) {
                     old_price,
                     discount,
                     new_price,
+                    wholesale_price,
                     quantity,
                     status,
                     created_at
@@ -592,6 +601,7 @@ async function updateOffer(req, res) {
                     old_price || null,
                     discount || 0,
                     new_price,
+                    wholesale_price || null,
                     quantity || 0,
                     status || "active",
                     id
