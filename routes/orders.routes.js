@@ -49,6 +49,36 @@ function authenticateToken(req, res, next) {
 }
 
 
+function optionalAuthenticateToken(req, res, next) {
+    const authHeader = req.headers.authorization;
+
+    const token =
+        authHeader && authHeader.startsWith("Bearer ")
+            ? authHeader.split(" ")[1]
+            : null;
+
+    // Aucun token : commande invitée autorisée
+    if (!token) {
+        req.user = null;
+        return next();
+    }
+
+    // Un token fourni mais invalide doit être refusé
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({
+                success: false,
+                message: "Session invalide."
+            });
+        }
+
+        req.user = user;
+        next();
+    });
+}
+
+
+
 /* =====================================================
    CREATE ORDER
    POST /api/orders
@@ -56,14 +86,14 @@ function authenticateToken(req, res, next) {
 
 router.post(
     "/",
-    authenticateToken,
+    optionalAuthenticateToken,
     async (req, res) => {
 
         const client = await pool.connect();
 
         try {
 
-            const userId = req.user.id;
+            const userId = req.user?.id || null;
 
             const {
                 firstName,
@@ -74,7 +104,8 @@ router.post(
                 address,
                 city,
                 district,
-                paymentMethod
+                paymentMethod,
+                items
             } = req.body;
 
 
@@ -111,56 +142,125 @@ router.post(
                 });
 
             }
-
-
+                        
             /* =========================================
-               GET CART
-            ========================================== */
+            GET CART — CLIENT OU INVITÉ
+            ========================================= */
 
-            const cartResult = await client.query(
-                `
-                SELECT
-                    c.offer_id,
-                    c.quantity,
-                    o.product_name,
-                    o.new_price,
-                    COALESCE(
-                        (
-                            SELECT oi.image_url
-                            FROM offer_images oi
-                            WHERE oi.offer_id = o.id
-                            ORDER BY
-                                oi.is_main DESC,
-                                oi.sort_order ASC
-                            LIMIT 1
-                        ),
-                        'amw.png'
-                    ) AS image_url
-                FROM cart_items c
+            let cart = [];
 
-                INNER JOIN offers o
-                    ON o.id = c.offer_id
+            if (userId) {
+                // Client connecté : panier stocké en base
+                const cartResult = await client.query(
+                    `
+                    SELECT
+                        c.offer_id,
+                        c.quantity,
+                        o.product_name,
+                        o.new_price,
+                        COALESCE(
+                            (
+                                SELECT oi.image_url
+                                FROM offer_images oi
+                                WHERE oi.offer_id = o.id
+                                ORDER BY oi.is_main DESC, oi.sort_order ASC
+                                LIMIT 1
+                            ),
+                            'amw.png'
+                        ) AS image_url
+                    FROM cart_items c
+                    INNER JOIN offers o ON o.id = c.offer_id
+                    WHERE c.user_id = $1
+                    ORDER BY c.created_at ASC
+                    `,
+                    [userId]
+                );
 
-                WHERE c.user_id = $1
+                cart = cartResult.rows;
 
-                ORDER BY c.created_at ASC
-                `,
-                [userId]
-            );
+            } else {
+                // Invité : produits envoyés depuis amwCart
+                if (!Array.isArray(items) || items.length === 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Votre panier est vide."
+                    });
+                }
 
+                const requestedItems = items.map(item => ({
+                    offerId: Number(item.offerId),
+                    quantity: Number(item.quantity)
+                }));
 
-            const cart = cartResult.rows;
+                const invalidItem = requestedItems.some(item =>
+                    !Number.isSafeInteger(item.offerId) ||
+                    item.offerId <= 0 ||
+                    !Number.isSafeInteger(item.quantity) ||
+                    item.quantity <= 0 ||
+                    item.quantity > 100
+                );
 
+                if (invalidItem) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Les produits ou quantités envoyés sont invalides."
+                    });
+                }
+
+                const offerIds = [
+                    ...new Set(requestedItems.map(item => item.offerId))
+                ];
+
+                const offersResult = await client.query(
+                    `
+                    SELECT
+                        o.id AS offer_id,
+                        o.product_name,
+                        o.new_price,
+                        COALESCE(
+                            (
+                                SELECT oi.image_url
+                                FROM offer_images oi
+                                WHERE oi.offer_id = o.id
+                                ORDER BY oi.is_main DESC, oi.sort_order ASC
+                                LIMIT 1
+                            ),
+                            'amw.png'
+                        ) AS image_url
+                    FROM offers o
+                    WHERE o.id = ANY($1::bigint[])
+                    AND o.status = 'active'
+                    `,
+                    [offerIds]
+                );
+
+                const offersById = new Map(
+                    offersResult.rows.map(offer => [
+                        Number(offer.offer_id),
+                        offer
+                    ])
+                );
+
+                if (offersById.size !== offerIds.length) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Un ou plusieurs produits sont introuvables."
+                    });
+                }
+
+                cart = requestedItems.map(item => ({
+                    ...offersById.get(item.offerId),
+                    quantity: item.quantity
+                }));
+            }
 
             if (!cart.length) {
-
                 return res.status(400).json({
                     success: false,
-                    message:
-                        "Votre panier est vide."
+                    message: "Votre panier est vide."
                 });
-
             }
+
 
 
             /* =========================================
@@ -338,23 +438,6 @@ router.post(
                 );
 
             }
-
-
-            /* =========================================
-               CLEAR CART
-            ========================================== */
-
-            await client.query(
-                `
-                DELETE FROM cart_items
-                WHERE user_id = $1
-                `,
-                [userId]
-            );
-
-
-            await client.query("COMMIT");
-
 
             /* =========================================
                RESPONSE
