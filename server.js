@@ -228,6 +228,24 @@ app.use(
 
 const PORT = process.env.PORT || 5000;
 
+
+// =========================================================
+// ERROR HANDLER
+// =========================================================
+
+app.use((err, req, res, next) => {
+    console.error("SERVER ERROR:", err);
+
+    if (res.headersSent) {
+        return next(err);
+    }
+
+    res.status(500).json({
+        success: false,
+        message: "Erreur interne du serveur."
+    });
+});
+
 app.listen(PORT, () => {
 
     console.log(
