@@ -439,6 +439,33 @@ router.post(
 
             }
 
+                        for (const item of cart) {
+                await client.query(
+                    `
+                    INSERT INTO order_items (
+                        order_id,
+                        offer_id,
+                        product_name,
+                        quantity,
+                        unit_price,
+                        image_url
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    `,
+                    [
+                        order.id,
+                        item.offer_id,
+                        item.product_name,
+                        item.quantity,
+                        item.new_price,
+                        item.image_url
+                    ]
+                );
+            }
+
+            // AJOUTER CETTE LIGNE
+            await client.query("COMMIT");
+
             /* =========================================
                RESPONSE
             ========================================== */
