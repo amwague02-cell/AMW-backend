@@ -66,12 +66,7 @@ router.post("/login", async (req, res) => {
             });
 
         }
-
-        console.log("USERNAME:", JSON.stringify(username));
-        console.log("DB USERNAME:", JSON.stringify(admin.username));
-        console.log("HASH:", admin.password_hash);
-        console.log("ACTIVE:", admin.is_active);
-
+        
         const passwordValid = await bcrypt.compare(
             password,
             admin.password_hash
