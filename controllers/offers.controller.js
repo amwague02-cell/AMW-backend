@@ -290,10 +290,77 @@ async function createOffer(req, res) {
 }
 
 async function getOffers(req, res) {
-
     try {
+        const page = Math.max(
+            1,
+            parseInt(req.query.page, 10) || 1
+        );
 
-        const result = await pool.query(`
+        const limit = Math.min(
+            30,
+            Math.max(
+                1,
+                parseInt(req.query.limit, 10) || 16
+            )
+        );
+
+        const offset = (page - 1) * limit;
+
+        const search = String(req.query.search || "").trim();
+        const category = String(req.query.category || "").trim();
+        const sort = String(req.query.sort || "newest");
+
+        const allowedSorts = {
+            newest: "o.created_at DESC, o.id DESC",
+            "price-low": "o.new_price ASC, o.id DESC",
+            "price-high": "o.new_price DESC, o.id DESC",
+            discount: "o.discount DESC NULLS LAST, o.created_at DESC, o.id DESC"
+        };
+
+        const orderBy = allowedSorts[sort] || allowedSorts.newest;
+
+        const conditions = [
+            "o.status = 'active'",
+            "o.quantity > 0"
+        ];
+
+        const params = [];
+
+        if (category && category !== "all") {
+            params.push(category);
+            conditions.push(`o.category = $${params.length}`);
+        }
+
+        if (search) {
+            params.push(`%${search}%`);
+            const index = params.length;
+
+            conditions.push(`
+                (
+                    o.product_name ILIKE $${index}
+                    OR o.category ILIKE $${index}
+                    OR o.description ILIKE $${index}
+                )
+            `);
+        }
+
+        const whereClause = conditions.join(" AND ");
+
+        // Nombre total des résultats correspondant aux filtres
+        const countResult = await pool.query(
+            `
+            SELECT COUNT(*) AS total
+            FROM offers o
+            WHERE ${whereClause}
+            `,
+            params
+        );
+
+        const total = Number(countResult.rows[0].total);
+
+        // Charger uniquement la page demandée
+        const result = await pool.query(
+            `
             SELECT
                 o.id,
                 o.reference,
@@ -318,7 +385,7 @@ async function getOffers(req, res) {
                         )
                         ORDER BY oi.sort_order ASC
                     ) FILTER (WHERE oi.id IS NOT NULL),
-                    '[]'
+                    '[]'::json
                 ) AS images
 
             FROM offers o
@@ -326,35 +393,39 @@ async function getOffers(req, res) {
             LEFT JOIN offer_images oi
                 ON oi.offer_id = o.id
 
-            WHERE o.status = 'active'
-              AND o.quantity > 0
+            WHERE ${whereClause}
 
             GROUP BY o.id
 
-            ORDER BY o.created_at DESC
-        `);
+            ORDER BY ${orderBy}
 
-        res.json({
-            success: true,
-            offers: result.rows
-        });
-
-    }
-
-    catch (error) {
-
-        console.error(
-            "❌ Get offers error:",
-            error
+            LIMIT $${params.length + 1}
+            OFFSET $${params.length + 2}
+            `,
+            [...params, limit, offset]
         );
 
-        res.status(500).json({
-            success: false,
-            message: "Erreur PostgreSQL."
+        res.set("Cache-Control", "no-store");
+
+        return res.json({
+            success: true,
+            offers: result.rows,
+            pagination: {
+                page,
+                limit,
+                total,
+                hasMore: offset + result.rows.length < total
+            }
         });
 
-    }
+    } catch (error) {
+        console.error("Get offers error:", error);
 
+        return res.status(500).json({
+            success: false,
+            message: "Erreur lors du chargement des offres."
+        });
+    }
 }
 
 async function getOfferById(req, res) {
