@@ -16,60 +16,31 @@ async function createNegotiation(req, res) {
         // AUTHENTICATION
         // =================================================
 
-        const authHeader =
-            req.headers.authorization;
+        // =================================================
+// OPTIONAL AUTHENTICATION
+// =================================================
 
-        if (
-            !authHeader ||
-            !authHeader.startsWith("Bearer ")
-        ) {
+let userId = null;
 
-            return res.status(401).json({
-                success: false,
-                message:
-                    "Vous devez être connecté pour envoyer une demande."
-            });
+const authHeader = req.headers.authorization;
 
-        }
+if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
 
+    try {
+        const decoded = jwt.verify(
+            token,
+            process.env.JWT_SECRET
+        );
 
-        const token =
-            authHeader.split(" ")[1];
+        userId = decoded.id || null;
 
-
-        let decoded;
-
-        try {
-
-            decoded = jwt.verify(
-                token,
-                process.env.JWT_SECRET
-            );
-
-        } catch (error) {
-
-            return res.status(401).json({
-                success: false,
-                message:
-                    "Session invalide ou expirée."
-            });
-
-        }
-
-
-        const userId =
-            decoded.id;
-
-
-        if (!userId) {
-
-            return res.status(401).json({
-                success: false,
-                message:
-                    "Utilisateur non identifié."
-            });
-
-        }
+    } catch (error) {
+        // Un visiteur peut envoyer une demande sans compte.
+        // Un jeton invalide ne bloque pas la demande.
+        userId = null;
+    }
+}
 
 
         // =================================================
@@ -116,15 +87,15 @@ async function createNegotiation(req, res) {
         }
 
 
-        // =================================================
-        // CHECK USER
-        // =================================================
+        // =====================================================
+        // CHECK USER — OPTIONAL
+        // =====================================================
 
-        const userResult =
-            await pool.query(
+        if (userId) {
+
+            const userResult = await pool.query(
                 `
-                SELECT
-                    id
+                SELECT id
                 FROM users
                 WHERE id = $1
                 LIMIT 1
@@ -132,18 +103,11 @@ async function createNegotiation(req, res) {
                 [userId]
             );
 
-
-        if (userResult.rows.length === 0) {
-
-            return res.status(404).json({
-                success: false,
-                message:
-                    "Utilisateur introuvable."
-            });
+            if (userResult.rows.length === 0) {
+                userId = null;
+            }
 
         }
-
-
         // =================================================
         // CHECK OFFER
         // =================================================
