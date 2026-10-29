@@ -74,7 +74,7 @@ if (authHeader && authHeader.startsWith("Bearer ")) {
 
 
         if (
-            !message ||
+            typeof message !== "string" ||
             !message.trim()
         ) {
 
