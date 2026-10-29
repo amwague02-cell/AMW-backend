@@ -169,8 +169,9 @@ router.post(
                             'amw.png'
                         ) AS image_url
                     FROM cart_items c
+                    INNER JOIN carts ca ON ca.id = c.cart_id
                     INNER JOIN offers o ON o.id = c.offer_id
-                    WHERE c.user_id = $1
+                    WHERE ca.user_id = $1
                     ORDER BY c.created_at ASC
                     `,
                     [userId]
@@ -437,30 +438,6 @@ router.post(
                     ]
                 );
 
-            }
-
-                        for (const item of cart) {
-                await client.query(
-                    `
-                    INSERT INTO order_items (
-                        order_id,
-                        offer_id,
-                        product_name,
-                        quantity,
-                        unit_price,
-                        image_url
-                    )
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                    `,
-                    [
-                        order.id,
-                        item.offer_id,
-                        item.product_name,
-                        item.quantity,
-                        item.new_price,
-                        item.image_url
-                    ]
-                );
             }
 
             // AJOUTER CETTE LIGNE
