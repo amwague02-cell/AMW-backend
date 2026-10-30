@@ -50,7 +50,11 @@ if (authHeader && authHeader.startsWith("Bearer ")) {
         const {
             offerId,
             quantity,
-            message
+            message,
+            firstName,
+            lastName,
+            phone,
+            email
         } = req.body;
 
 
@@ -166,20 +170,23 @@ if (authHeader && authHeader.startsWith("Bearer ")) {
                     user_id,
                     offer_id,
                     quantity,
-                    message
+                    message,
+                    first_name,
+                    last_name,
+                    phone,
+                    email
                 )
-                VALUES (
-                    $1,
-                    $2,
-                    $3,
-                    $4
-                )
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
                 RETURNING
                     id,
                     user_id,
                     offer_id,
                     quantity,
                     message,
+                    first_name,
+                    last_name,
+                    phone,
+                    email,
                     status,
                     created_at
                 `,
@@ -187,7 +194,11 @@ if (authHeader && authHeader.startsWith("Bearer ")) {
                     userId,
                     offerId,
                     parsedQuantity,
-                    message.trim()
+                    message.trim(),
+                    firstName.trim(),
+                    lastName.trim(),
+                    phone ? phone.trim() : null,
+                    email.trim()
                 ]
             );
 

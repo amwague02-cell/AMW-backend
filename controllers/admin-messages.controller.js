@@ -22,7 +22,10 @@ async function getAdminMessages(req, res) {
 
                 c.id AS source_id,
 
-                c.name AS name,
+                CONCAT(c.first_name, ' ', c.last_name) AS name,
+
+                c.first_name,
+                c.last_name,
 
                 c.email,
                 c.phone,
@@ -37,7 +40,7 @@ async function getAdminMessages(req, res) {
                 c.replied_at,
                 c.admin_reply,
 
-                NULL::INTEGER AS product_id,
+                NULL::BIGINT AS product_id,
                 NULL::TEXT AS product_name,
                 NULL::TEXT AS product_reference
 
@@ -55,16 +58,46 @@ async function getAdminMessages(req, res) {
 
                 n.id AS source_id,
 
-                u.full_name AS name,
+                COALESCE(
+                    NULLIF(
+                        CONCAT_WS(
+                            ' ',
+                            NULLIF(n.first_name, ''),
+                            NULLIF(n.last_name, '')
+                        ),
+                        ''
+                    ),
+                    NULLIF(u.full_name, ''),
+                    'Visiteur'
+                ) AS name,
 
-                u.email,
-                u.phone,
+                COALESCE(
+                    NULLIF(n.first_name, ''),
+                    SPLIT_PART(COALESCE(u.full_name, ''), ' ', 1),
+                    'Visiteur'
+                ) AS first_name,
+
+                COALESCE(
+                    NULLIF(n.last_name, ''),
+                    CASE
+                        WHEN POSITION(' ' IN COALESCE(u.full_name, '')) > 0
+                        THEN SUBSTRING(
+                            u.full_name
+                            FROM POSITION(' ' IN u.full_name) + 1
+                        )
+                        ELSE ''
+                    END
+                ) AS last_name,
+
+                COALESCE(n.email, u.email) AS email,
+
+                COALESCE(n.phone, u.phone) AS phone,
 
                 'Négociation en quantité' AS subject,
 
                 n.message,
 
-                n.message_status AS status,
+                n.status,
 
                 n.created_at,
 
@@ -77,7 +110,7 @@ async function getAdminMessages(req, res) {
 
             FROM negotiation_requests n
 
-            INNER JOIN users u
+            LEFT JOIN users u
                 ON u.id = n.user_id
 
             INNER JOIN offers o
@@ -129,56 +162,47 @@ async function markMessageAsRead(req, res) {
 
         const { id } = req.params;
 
-
         if (id.startsWith("contact-")) {
 
             const sourceId =
                 id.replace("contact-", "");
 
-
             await pool.query(
                 `
                 UPDATE contact_messages
-
                 SET status = 'read'
-
                 WHERE id = $1
                 `,
                 [sourceId]
             );
 
-        }
-
-
-        else if (id.startsWith("negotiation-")) {
+        } else if (id.startsWith("negotiation-")) {
 
             const sourceId =
                 id.replace("negotiation-", "");
 
-
             await pool.query(
                 `
                 UPDATE negotiation_requests
-
-                SET message_status = 'read'
-
+                SET status = 'read'
                 WHERE id = $1
                 `,
                 [sourceId]
             );
 
+        } else {
+
+            return res.status(400).json({
+                success: false,
+                message: "Identifiant invalide."
+            });
+
         }
 
-
         return res.json({
-
             success: true,
-
-            message:
-                "Message marqué comme lu."
-
+            message: "Message marqué comme lu."
         });
-
 
     } catch (error) {
 
@@ -188,18 +212,13 @@ async function markMessageAsRead(req, res) {
         );
 
         return res.status(500).json({
-
             success: false,
-
-            message:
-                "Erreur lors de la mise à jour."
-
+            message: "Erreur lors de la mise à jour."
         });
 
     }
 
 }
-
 
 // =====================================================
 // MARK MESSAGE AS REPLIED
@@ -211,76 +230,72 @@ async function markMessageAsReplied(req, res) {
 
         const { id } = req.params;
 
-        const {
-            reply,
-            channel
-        } = req.body;
+        const { reply, channel } = req.body;
 
+        if (
+            typeof reply !== "string" ||
+            !reply.trim()
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Réponse vide."
+            });
+
+        }
 
         if (id.startsWith("contact-")) {
 
             const sourceId =
                 id.replace("contact-", "");
 
-
             await pool.query(
                 `
                 UPDATE contact_messages
-
                 SET
                     status = 'replied',
                     admin_reply = $1,
                     replied_at = CURRENT_TIMESTAMP
-
                 WHERE id = $2
                 `,
-                [
-                    reply || null,
-                    sourceId
-                ]
+                [reply.trim(), sourceId]
             );
 
-        }
-
-
-        else if (id.startsWith("negotiation-")) {
+        } else if (id.startsWith("negotiation-")) {
 
             const sourceId =
                 id.replace("negotiation-", "");
 
-
             await pool.query(
                 `
                 UPDATE negotiation_requests
-
                 SET
-                    message_status = 'replied',
+                    status = 'replied',
                     admin_reply = $1,
                     replied_at = CURRENT_TIMESTAMP
-
                 WHERE id = $2
                 `,
-                [
-                    reply || null,
-                    sourceId
-                ]
+                [reply.trim(), sourceId]
             );
 
-        }
+        } else {
 
+            return res.status(400).json({
+                success: false,
+                message: "Identifiant invalide."
+            });
+
+        }
 
         return res.json({
 
             success: true,
 
-            message:
-                "Réponse enregistrée.",
+            message: "Réponse enregistrée.",
 
-            channel:
-                channel || null
+            channel: channel || null
 
         });
-
 
     } catch (error) {
 
@@ -301,7 +316,6 @@ async function markMessageAsReplied(req, res) {
     }
 
 }
-
 
 // =====================================================
 // DELETE MESSAGE
