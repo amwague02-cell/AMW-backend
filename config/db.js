@@ -8,9 +8,6 @@ if (!databaseUrl) {
     try {
         const dbUrl = new URL(databaseUrl);
 
-        console.log("🔎 PostgreSQL HOST:", dbUrl.hostname);
-        console.log("🔎 PostgreSQL PORT:", dbUrl.port || "5432");
-        console.log("🔎 PostgreSQL DATABASE:", dbUrl.pathname);
     } catch (error) {
         console.error("❌ Invalid DATABASE_URL");
     }

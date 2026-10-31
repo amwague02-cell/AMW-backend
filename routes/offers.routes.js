@@ -10,6 +10,7 @@ const requireAdmin =
 
 const {
     createOffer,
+    createAIOffer,
     getOffers,
     getOfferById,
     getCategories,
@@ -46,6 +47,18 @@ router.post(
     "/",
     upload.array("images", 8),
     createOffer
+);
+
+
+/* =====================================================
+   CREATE AI OFFER — ADMIN
+===================================================== */
+
+router.post(
+    "/ai",
+    requireAdmin,
+    upload.array("images", 8),
+    createAIOffer
 );
 
 

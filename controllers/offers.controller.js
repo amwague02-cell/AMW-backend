@@ -289,6 +289,248 @@ async function createOffer(req, res) {
 
 }
 
+/* =====================================================
+   CREATE AI OFFER
+   Save Cloudinary AI images without uploading them again
+===================================================== */
+
+async function createAIOffer(req, res) {
+
+    const client = await pool.connect();
+
+    try {
+
+        const {
+            productName,
+            category,
+            description,
+            oldPrice,
+            discount,
+            newPrice,
+            wholesalePrice,
+            quantity,
+            status,
+            aiImages
+        } = req.body;
+
+        if (!productName || !category || !description || !newPrice || Number(newPrice) <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Informations obligatoires manquantes."
+            });
+        }
+
+        // Lire les images IA
+        let parsedAIImages = [];
+
+        try {
+            parsedAIImages = aiImages ? JSON.parse(aiImages) : [];
+        } catch (_) {
+            return res.status(400).json({
+                success: false,
+                message: "Format des images IA invalide."
+            });
+        }
+
+        if (!Array.isArray(parsedAIImages)) {
+            return res.status(400).json({
+                success: false,
+                message: "La liste des images IA est invalide."
+            });
+        }
+
+        const localFiles = Array.isArray(req.files) ? req.files : [];
+
+        if (parsedAIImages.length + localFiles.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Au moins une photo est obligatoire."
+            });
+        }
+
+        if (parsedAIImages.length + localFiles.length > 8) {
+            return res.status(400).json({
+                success: false,
+                message: "Maximum 8 images autorisées."
+            });
+        }
+
+        // Vérifier les images générées par notre service Cloudinary
+        for (const image of parsedAIImages) {
+
+            if (!image.url || !image.publicId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Une image IA ne contient pas les informations nécessaires."
+                });
+            }
+
+            let parsedUrl;
+
+            try {
+                parsedUrl = new URL(image.url);
+            } catch (_) {
+                return res.status(400).json({
+                    success: false,
+                    message: "URL d'image invalide."
+                });
+            }
+
+            if (
+                parsedUrl.protocol !== "https:" ||
+                parsedUrl.hostname !== "res.cloudinary.com" ||
+                !image.publicId.startsWith("amw/ai-generated/") ||
+                image.publicId.includes("..")
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Image IA non autorisée."
+                });
+            }
+        }
+
+        await client.query("BEGIN");
+
+        // 1. Créer l'offre
+        const offerResult = await client.query(
+            `
+            INSERT INTO offers (
+                reference,
+                product_name,
+                category,
+                description,
+                old_price,
+                discount,
+                new_price,
+                wholesale_price,
+                quantity,
+                status
+            )
+            VALUES (
+                'TEMP',
+                $1, $2, $3, $4, $5, $6, $7, $8, $9
+            )
+            RETURNING id
+            `,
+            [
+                productName,
+                category,
+                description,
+                oldPrice || null,
+                discount || 0,
+                newPrice,
+                wholesalePrice || null,
+                quantity === undefined ? 0 : quantity,
+                status || "active"
+            ]
+        );
+
+        const offerId = offerResult.rows[0].id;
+        const reference = generateReference(offerId);
+
+        // 2. Générer la référence
+        await client.query(
+            `
+            UPDATE offers
+            SET reference = $1
+            WHERE id = $2
+            `,
+            [reference, offerId]
+        );
+
+        // 3. Enregistrer les images IA directement depuis Cloudinary
+        let sortOrder = 0;
+
+        for (const image of parsedAIImages) {
+
+            await client.query(
+                `
+                INSERT INTO offer_images (
+                    offer_id,
+                    cloudinary_public_id,
+                    image_url,
+                    resource_type,
+                    is_main,
+                    sort_order
+                )
+                VALUES ($1, $2, $3, $4, $5, $6)
+                `,
+                [
+                    offerId,
+                    image.publicId,
+                    image.url,
+                    "image",
+                    sortOrder === 0,
+                    sortOrder
+                ]
+            );
+
+            sortOrder++;
+        }
+
+        // 4. Envoyer les éventuelles images locales à Cloudinary
+        for (const file of localFiles) {
+
+            const result = await uploadToCloudinary(file);
+
+            await client.query(
+                `
+                INSERT INTO offer_images (
+                    offer_id,
+                    cloudinary_public_id,
+                    image_url,
+                    resource_type,
+                    is_main,
+                    sort_order
+                )
+                VALUES ($1, $2, $3, $4, $5, $6)
+                `,
+                [
+                    offerId,
+                    result.public_id,
+                    result.secure_url,
+                    result.resource_type,
+                    sortOrder === 0,
+                    sortOrder
+                ]
+            );
+
+            sortOrder++;
+        }
+
+        await client.query("COMMIT");
+
+        return res.status(201).json({
+            success: true,
+            message: "Offre créée avec succès.",
+            offer: {
+                id: offerId,
+                reference,
+                productName,
+                category,
+                quantity,
+                status: status || "active"
+            }
+        });
+
+    } catch (error) {
+
+        try {
+            await client.query("ROLLBACK");
+        } catch (_) {}
+
+        console.error("Create AI offer error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Erreur lors de la création de l'offre."
+        });
+
+    } finally {
+        client.release();
+    }
+}
+
 async function getOffers(req, res) {
     try {
         const page = Math.max(
@@ -889,6 +1131,7 @@ async function deleteOffer(req, res) {
 
 module.exports = {
     createOffer,
+    createAIOffer,
     getOffers,
     getOfferById,
     getCategories,
