@@ -73,7 +73,9 @@ app.use(
         origin: [
             process.env.FRONTEND_URL,
             "http://127.0.0.1:5500",
-            "https://amwague.netlify.app"
+            "https://amwague.netlify.app",
+            "https://amwdiver.com",
+            "https://www.amwdiver.com"
         ],
         credentials: true
     })
