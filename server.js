@@ -52,6 +52,10 @@ const adminSiteAdsRoutes =
 const siteAdsRoutes =
     require("./routes/siteAds.routes");
 
+const aiProductsRoutes =
+    require("./routes/ai-products.routes");
+
+
 
 
 
@@ -220,6 +224,14 @@ app.use(
     "/api/auth",
     authRoutes
 );
+
+app.use(
+    "/api/ai-products",
+    aiProductsRoutes
+);
+
+
+
 
 
 

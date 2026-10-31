@@ -21,6 +21,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",
     "nodemailer": "^9.0.6",
+    "openai": "^7.47.0",
     "pg": "^8.23.0",
     "streamifier": "^0.1.1"
   },
