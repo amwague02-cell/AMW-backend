@@ -649,7 +649,7 @@ async function updateOffer(req, res) {
                     quantity = $8,
                     status = $9
 
-                WHERE id = $9
+                WHERE id = $10
 
                 RETURNING
                     id,
