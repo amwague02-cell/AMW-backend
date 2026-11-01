@@ -434,8 +434,26 @@ exports.forgotPassword = async (req, res) => {
         }
 
 
-        const identifierValue =
-            identifier.trim().toLowerCase();
+        const rawIdentifier = identifier.trim();
+
+        let identifierValue;
+
+        if (rawIdentifier.includes("@")) {
+
+            identifierValue = rawIdentifier.toLowerCase();
+
+        } else {
+
+            identifierValue = normalizeSenegalPhone(rawIdentifier);
+
+            if (!identifierValue) {
+                // Ne pas révéler si un compte existe.
+                return res.json({
+                    message:
+                        "Si ce compte existe, le code de vérification a été envoyé."
+                });
+            }
+        }
 
 
         /* =============================================
@@ -666,8 +684,25 @@ exports.verifyResetCode = async (req, res) => {
         }
 
 
-        const identifierValue =
-            identifier.trim().toLowerCase();
+        const rawIdentifier = identifier.trim();
+
+        let identifierValue;
+
+        if (rawIdentifier.includes("@")) {
+
+            identifierValue = rawIdentifier.toLowerCase();
+
+        } else {
+
+            identifierValue = normalizeSenegalPhone(rawIdentifier);
+
+            if (!identifierValue) {
+                return res.status(400).json({
+                    message:
+                        "Code de vérification invalide ou expiré."
+                });
+            }
+        }
 
 
         const codeValue =
