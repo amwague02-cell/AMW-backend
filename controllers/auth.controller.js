@@ -51,84 +51,98 @@ function normalizeSenegalPhone(value) {
     return phone;
 }
 
+
 /* =====================================================
-   REGISTER
+   REGISTER — VALIDATION EMAIL / TÉLÉPHONE SÉNÉGAL
 ===================================================== */
 
 exports.register = async (req, res) => {
-
     try {
-
         const {
             fullName,
             identifier,
             password
         } = req.body;
 
-
+        // Vérification des champs obligatoires
         if (
-            !fullName ||
-            !identifier ||
+            typeof fullName !== "string" ||
+            typeof identifier !== "string" ||
+            typeof password !== "string" ||
+            !fullName.trim() ||
+            !identifier.trim() ||
             !password
         ) {
-
             return res.status(400).json({
-                message:
-                    "Tous les champs sont obligatoires."
+                success: false,
+                message: "Tous les champs sont obligatoires."
             });
-
         }
 
-
-        if (password.length < 6) {
-
+        // Validation du nom
+        if (fullName.trim().length > 150) {
             return res.status(400).json({
+                success: false,
+                message: "Le nom complet est trop long."
+            });
+        }
+
+        // Validation du mot de passe
+        if (password.length < 6) {
+            return res.status(400).json({
+                success: false,
                 message:
                     "Le mot de passe doit contenir au moins 6 caractères."
             });
-
         }
 
+        const identifierValue =
+            identifier.trim().toLowerCase();
 
-        
-            const identifierValue =
-                identifier.trim().toLowerCase();
+        let email = null;
+        let phone = null;
 
-            const isEmail =
-                identifierValue.includes("@");
+        // Déterminer si l'identifiant est un e-mail
+        if (identifierValue.includes("@")) {
+            email = identifierValue;
 
-            let email = null;
-            let phone = null;
-
-            if (isEmail) {
-
-                email = identifierValue;
-
-            } else {
-
-                phone = normalizeSenegalPhone(identifier);
-
-                if (!phone) {
-                    return res.status(400).json({
-                        success: false,
-                        message:
-                            "Veuillez saisir un numéro de téléphone mobile sénégalais valide de 9 chiffres."
-                    });
-                }
+            // Validation minimale du format e-mail
+            if (
+                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Veuillez saisir une adresse e-mail valide."
+                });
             }
-            
-        /* =============================================
-           CHECK USER
-        ============================================= */
+        } else {
+            // Normaliser et valider le numéro sénégalais
+            phone = normalizeSenegalPhone(identifier);
 
+            if (!phone) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Veuillez saisir un numéro de téléphone mobile sénégalais valide de 9 chiffres."
+                });
+            }
+        }
+
+        // Vérifier si l'e-mail ou le téléphone existe déjà
         const existingUser = await pool.query(
             `
             SELECT id
             FROM users
             WHERE
-                ($1::text IS NOT NULL AND LOWER(email) = $1)
+                (
+                    $1::text IS NOT NULL
+                    AND LOWER(email) = $1
+                )
                 OR
-                ($2::text IS NOT NULL AND phone = $2)
+                (
+                    $2::text IS NOT NULL
+                    AND phone = $2
+                )
             LIMIT 1
             `,
             [email, phone]
@@ -142,117 +156,61 @@ exports.register = async (req, res) => {
             });
         }
 
-
-        if (existingUser.rows.length > 0) {
-
-            return res.status(409).json({
-
-                message:
-                    "Un compte existe déjà avec cet identifiant."
-
-            });
-
-        }
-
-
-        /* =============================================
-           HASH PASSWORD
-        ============================================= */
-
+        // Chiffrer le mot de passe
         const passwordHash =
             await bcrypt.hash(password, 12);
 
-        if (isEmail) {
-
-            email = identifierValue;
-
-        } else {
-
-            phone = identifier.trim();
-
-        }
-
-
-        /* =============================================
-           CREATE USER
-        ============================================= */
-
-        const result =
-            await pool.query(
-
-                `
-                INSERT INTO users (
-
-                    full_name,
-                    email,
-                    phone,
-                    password_hash,
-                    role
-
-                )
-
-                VALUES (
-
-                    $1,
-                    $2,
-                    $3,
-                    $4,
-                    'user'
-
-                )
-
-                RETURNING
-                    id,
-                    full_name,
-                    email,
-                    phone,
-                    role,
-                    created_at
-                `,
-
-                [
-
-                    fullName.trim(),
-                    email,
-                    phone,
-                    passwordHash
-
-                ]
-
-            );
-
-
-        const user =
-            result.rows[0];
-
-
-        res.status(201).json({
-
-            message:
-                "Compte créé avec succès.",
-
-            user
-
-        });
-
-
-    } catch (error) {
-
-        console.error(
-            "REGISTER ERROR:",
-            error
+        // Créer le compte
+        const result = await pool.query(
+            `
+            INSERT INTO users (
+                full_name,
+                email,
+                phone,
+                password_hash,
+                role
+            )
+            VALUES ($1, $2, $3, $4, 'user')
+            RETURNING
+                id,
+                full_name,
+                email,
+                phone,
+                role,
+                created_at
+            `,
+            [
+                fullName.trim(),
+                email,
+                phone,
+                passwordHash
+            ]
         );
 
-
-        res.status(500).json({
-
-            message:
-                "Erreur lors de la création du compte."
-
+        return res.status(201).json({
+            success: true,
+            message: "Compte créé avec succès.",
+            user: result.rows[0]
         });
 
-    }
+    } catch (error) {
+        console.error("REGISTER ERROR:", error);
 
+        // Protection supplémentaire contre les doublons concurrents
+        if (error.code === "23505") {
+            return res.status(409).json({
+                success: false,
+                message:
+                    "Cet e-mail ou ce numéro de téléphone est déjà utilisé."
+            });
+        }
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Erreur lors de la création du compte."
+        });
+    }
 };
 
 
@@ -285,8 +243,28 @@ exports.login = async (req, res) => {
         }
 
 
-        const identifierValue =
-            identifier.trim().toLowerCase();
+        const rawIdentifier = identifier.trim();
+
+        let identifierValue;
+
+        if (rawIdentifier.includes("@")) {
+
+            // Connexion par e-mail
+            identifierValue = rawIdentifier.toLowerCase();
+
+        } else {
+
+            // Connexion par numéro sénégalais
+            identifierValue = normalizeSenegalPhone(rawIdentifier);
+
+            if (!identifierValue) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Veuillez saisir un e-mail valide ou un numéro sénégalais valide."
+                });
+            }
+        }
 
 
         /* =============================================
