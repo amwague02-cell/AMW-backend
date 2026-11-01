@@ -15,6 +15,42 @@ const {
 } = require("../services/email.service");
 
 
+
+/* =====================================================
+   VALIDATION DES NUMÉROS SÉNÉGALAIS
+===================================================== */
+
+function normalizeSenegalPhone(value) {
+    if (typeof value !== "string") {
+        return null;
+    }
+
+    let phone = value.trim();
+
+    // Autoriser les espaces, tirets et parenthèses.
+    phone = phone.replace(/[\s().-]/g, "");
+
+    // Accepter +221 ou 00221.
+    if (phone.startsWith("+221")) {
+        phone = phone.slice(4);
+    } else if (phone.startsWith("00221")) {
+        phone = phone.slice(5);
+    }
+
+    // Refuser tout autre caractère ou indicatif international.
+    if (!/^\d+$/.test(phone)) {
+        return null;
+    }
+
+    // Format mobile sénégalais : 9 chiffres commençant par 7.
+    if (!/^7\d{8}$/.test(phone)) {
+        return null;
+    }
+
+    // Stocker tous les numéros sous le même format.
+    return phone;
+}
+
 /* =====================================================
    REGISTER
 ===================================================== */
@@ -54,27 +90,57 @@ exports.register = async (req, res) => {
         }
 
 
-        const identifierValue =
-            identifier.trim().toLowerCase();
+        
+            const identifierValue =
+                identifier.trim().toLowerCase();
 
+            const isEmail =
+                identifierValue.includes("@");
 
+            let email = null;
+            let phone = null;
+
+            if (isEmail) {
+
+                email = identifierValue;
+
+            } else {
+
+                phone = normalizeSenegalPhone(identifier);
+
+                if (!phone) {
+                    return res.status(400).json({
+                        success: false,
+                        message:
+                            "Veuillez saisir un numéro de téléphone mobile sénégalais valide de 9 chiffres."
+                    });
+                }
+            }
+            
         /* =============================================
            CHECK USER
         ============================================= */
 
-        const existingUser =
-            await pool.query(
+        const existingUser = await pool.query(
+            `
+            SELECT id
+            FROM users
+            WHERE
+                ($1::text IS NOT NULL AND LOWER(email) = $1)
+                OR
+                ($2::text IS NOT NULL AND phone = $2)
+            LIMIT 1
+            `,
+            [email, phone]
+        );
 
-                `
-                SELECT id
-                FROM users
-                WHERE email = $1
-                OR phone = $1
-                `,
-
-                [identifierValue]
-
-            );
+        if (existingUser.rows.length > 0) {
+            return res.status(409).json({
+                success: false,
+                message:
+                    "Un compte existe déjà avec cet e-mail ou ce numéro de téléphone."
+            });
+        }
 
 
         if (existingUser.rows.length > 0) {
@@ -95,20 +161,6 @@ exports.register = async (req, res) => {
 
         const passwordHash =
             await bcrypt.hash(password, 12);
-
-
-        /* =============================================
-           EMAIL OR PHONE
-        ============================================= */
-
-        const isEmail =
-            identifierValue.includes("@");
-
-
-        let email = null;
-
-        let phone = null;
-
 
         if (isEmail) {
 
@@ -1263,6 +1315,18 @@ exports.updateProfile = async (req, res) => {
             address
         } = req.body;
 
+        const normalizedPhone = phone
+            ? normalizeSenegalPhone(phone)
+            : null;
+
+        if (phone && !normalizedPhone) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Veuillez saisir un numéro de téléphone mobile sénégalais valide de 9 chiffres."
+            });
+        }
+
 
         if (!fullName || !fullName.trim()) {
 
@@ -1307,9 +1371,7 @@ exports.updateProfile = async (req, res) => {
 
                 fullName.trim(),
 
-                phone
-                    ? phone.trim()
-                    : null,
+                normalizedPhone,
 
                 gender
                     ? gender.trim()
@@ -1380,6 +1442,14 @@ exports.updateProfile = async (req, res) => {
             error
         );
 
+
+        if (error.code === "23505") {
+            return res.status(409).json({
+                success: false,
+                message:
+                    "Ce numéro de téléphone est déjà utilisé par un autre compte."
+            });
+        }
 
         res.status(500).json({
 
