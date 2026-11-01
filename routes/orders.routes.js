@@ -77,6 +77,22 @@ function optionalAuthenticateToken(req, res, next) {
     });
 }
 
+function getGuestOrderAccess(req, res, next) {
+    const { reference, phone } = req.query;
+
+    if (!reference || !phone) {
+        return res.status(400).json({
+            success: false,
+            message: "Référence et téléphone obligatoires."
+        });
+    }
+
+    req.guestOrderReference = reference.trim();
+    req.guestOrderPhone = phone.trim();
+
+    next();
+}
+
 
 
 /* =====================================================
@@ -504,6 +520,79 @@ router.post(
 
         }
 
+    }
+);
+
+
+// GET /api/orders/guest-order?reference=...&phone=...
+router.get(
+    "/guest-order",
+    getGuestOrderAccess,
+    async (req, res) => {
+        try {
+            const result = await pool.query(
+                `SELECT id, reference, first_name, last_name,
+                        phone, email, delivery_method, address,
+                        city, district, payment_method, subtotal,
+                        delivery_price, total, status, created_at
+                 FROM orders
+                 WHERE reference = $1
+                   AND phone = $2
+                   AND user_id IS NULL`,
+                [
+                    req.guestOrderReference,
+                    req.guestOrderPhone
+                ]
+            );
+
+            if (!result.rows.length) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Commande introuvable ou informations incorrectes."
+                });
+            }
+
+            const order = result.rows[0];
+
+            const items = await pool.query(
+                `SELECT product_name, quantity, unit_price, image_url
+                 FROM order_items
+                 WHERE order_id = $1
+                 ORDER BY id ASC`,
+                [order.id]
+            );
+
+            res.json({
+                success: true,
+                order: {
+                    id: Number(order.id),
+                    reference: order.reference,
+                    date: order.created_at,
+                    status: order.status,
+                    total: Number(order.total),
+                    payment: order.payment_method,
+                    delivery: order.delivery_method,
+                    address: [
+                        order.city,
+                        order.district,
+                        order.address
+                    ].filter(Boolean).join(", "),
+                    products: items.rows.map(item => ({
+                        name: item.product_name,
+                        quantity: Number(item.quantity),
+                        price: Number(item.unit_price),
+                        image: item.image_url || "amw.png"
+                    }))
+                }
+            });
+        } catch (error) {
+            console.error("GUEST ORDER ERROR:", error);
+
+            res.status(500).json({
+                success: false,
+                message: "Impossible de charger la commande."
+            });
+        }
     }
 );
 
