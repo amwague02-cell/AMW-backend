@@ -91,6 +91,55 @@ Return ONLY valid JSON in this exact structure:
     return result;
 }
 
+async function analyzeImageForSearch(imageFile) {
+    const imageBase64 = imageFile.buffer.toString("base64");
+    const imageUrl = `data:${imageFile.mimetype};base64,${imageBase64}`;
+
+    const response = await openai.responses.create({
+        model: process.env.OPENAI_TEXT_MODEL || "gpt-4.1-mini",
+        input: [{
+            role: "user",
+            content: [
+                {
+                    type: "input_text",
+                    text: `
+Identify the product in this image for an e-commerce search.
+Return ONLY valid JSON:
+{
+  "productName": "French product name",
+  "category": "Category",
+  "searchTerms": ["term 1", "term 2", "term 3"],
+  "description": "Short visual description in French"
+}
+Do not invent brands or technical specifications.
+`
+                },
+                {
+                    type: "input_image",
+                    image_url: imageUrl,
+                    detail: "high"
+                }
+            ]
+        }]
+    });
+
+    const output = response.output_text || "";
+    const match = output.match(/\{[\s\S]*\}/);
+
+    if (!match) {
+        throw new Error("Impossible d'identifier le produit.");
+    }
+
+    const result = JSON.parse(match[0]);
+
+    if (!result.productName || !Array.isArray(result.searchTerms)) {
+        throw new Error("Analyse d'image incomplète.");
+    }
+
+    return result;
+}
+
 module.exports = {
-    analyzeProduct
+    analyzeProduct,
+    analyzeImageForSearch
 };

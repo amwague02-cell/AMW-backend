@@ -18,6 +18,26 @@ const {
     deleteOffer
 } = require("../controllers/offers.controller");
 
+const multer = require("multer");
+
+const {
+    searchByImage,
+    createImageSearchAlert
+} = require("../controllers/image-search.controller");
+
+const imageSearchUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 8 * 1024 * 1024,
+        files: 1
+    },
+    fileFilter: (req, file, cb) => {
+        if (!file.mimetype.startsWith("image/")) {
+            return cb(new Error("Only image files are allowed."));
+        }
+        cb(null, true);
+    }
+});
 
 /* =====================================================
    GET ALL OFFERS
@@ -61,6 +81,16 @@ router.post(
     createAIOffer
 );
 
+router.post(
+    "/search-by-image",
+    imageSearchUpload.single("image"),
+    searchByImage
+);
+
+router.post(
+    "/image-search-alerts",
+    createImageSearchAlert
+);
 
 /* =====================================================
    GET OFFER BY ID
