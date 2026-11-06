@@ -1,12 +1,12 @@
 
-const OpenAI = require("openai");
-const { toFile } = require("openai/uploads");
+const {
+    googleAI,
+    IMAGE_MODEL
+} = require("./google-ai.service");
+
 const cloudinary = require("./cloudinary.service");
 const { Readable } = require("stream");
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
 
 const angles = [
     "Professional front product photography",
@@ -20,6 +20,11 @@ const angles = [
     "Top-down commercial photography",
     "Premium catalog photography"
 ];
+
+
+/* =========================================
+   CLOUDINARY UPLOAD
+========================================= */
 
 function uploadBuffer(buffer) {
 
@@ -36,9 +41,14 @@ function uploadBuffer(buffer) {
             }
         );
 
-        Readable.from(buffer).pipe(stream);
+        Readable.from([buffer]).pipe(stream);
     });
 }
+
+
+/* =========================================
+   GENERATE ONE IMAGE WITH GEMINI
+========================================= */
 
 async function generateOneImage(
     imageFile,
@@ -47,13 +57,13 @@ async function generateOneImage(
     index
 ) {
 
-    const reference = await toFile(
-        imageFile.buffer,
-        "product-reference.jpg",
-        { type: imageFile.mimetype }
-    );
+    if (!imageFile?.buffer || !imageFile?.mimetype) {
+        throw new Error("Product reference image is required.");
+    }
 
-    const angle = angles[index % angles.length];
+    const angle = angles[
+        ((index % angles.length) + angles.length) % angles.length
+    ];
 
     const prompt = `
 Create a premium commercial advertising photograph
@@ -67,38 +77,88 @@ ${angle}
 Additional instructions:
 ${direction || "Elegant professional commercial presentation."}
 
-IMPORTANT:
-- Preserve the real product identity.
-- Preserve its actual shape and main design.
+PRODUCT IDENTITY PRESERVATION:
+
+- Use the uploaded photograph as the primary reference.
+- Preserve the actual product identity.
+- Preserve its original shape and proportions.
+- Preserve its real colors and visible materials.
+- Preserve distinctive design details.
+- Do not change the brand or model.
 - Do not invent accessories or specifications.
-- Do not change the brand or product model.
-- Use realistic professional lighting.
-- Create a clean premium advertising composition.
-- No text, no watermark, no fake logos.
-- High-quality commercial photography.
+- Do not replace the product with a similar product.
+
+PHOTOGRAPHY:
+
+- Professional commercial studio lighting.
+- Realistic shadows and reflections.
+- Premium advertising composition.
+- Clean elegant background.
+- Product must remain the main subject.
+- High-quality realistic product photography.
+
+No text, no watermark, no fake logos.
 `;
 
-    const result = await openai.images.edit({
 
-        model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2",
+    const response = await googleAI.models.generateContent({
 
-        image: reference,
+        model: IMAGE_MODEL,
 
-        prompt,
+        contents: [
+            {
+                role: "user",
+                parts: [
+                    {
+                        text: prompt
+                    },
+                    {
+                        inlineData: {
+                            mimeType: imageFile.mimetype,
+                            data: imageFile.buffer.toString("base64")
+                        }
+                    }
+                ]
+            }
+        ],
 
-        size: "1024x1024",
+        config: {
+            responseModalities: ["IMAGE"],
 
-        quality: "high"
-
+            imageConfig: {
+                aspectRatio: "1:1",
+                imageSize: "2K"
+            }
+        }
     });
 
-    const base64 = result.data?.[0]?.b64_json;
 
-    if (!base64) {
-        throw new Error("Image generation failed.");
+    // Extract generated image from Gemini response.
+
+    const parts =
+        response.candidates?.[0]?.content?.parts || [];
+
+    const imagePart = parts.find(
+        part => part.inlineData?.data
+    );
+
+    if (!imagePart) {
+        const reason =
+            response.candidates?.[0]?.finishReason;
+
+        throw new Error(
+            `Gemini did not return an image. Reason: ${reason || "Unknown"}`
+        );
     }
 
-    const buffer = Buffer.from(base64, "base64");
+
+    const buffer = Buffer.from(
+        imagePart.inlineData.data,
+        "base64"
+    );
+
+
+    // Upload generated image to Cloudinary.
 
     const uploaded = await uploadBuffer(buffer);
 
@@ -109,6 +169,11 @@ IMPORTANT:
     };
 }
 
+
+/* =========================================
+   GENERATE MULTIPLE IMAGES
+========================================= */
+
 async function generateImages(
     imageFile,
     productName,
@@ -116,16 +181,26 @@ async function generateImages(
     direction = ""
 ) {
 
-    count = Math.min(10, Math.max(5, Number(count) || 5));
+    count = Math.min(
+        10,
+        Math.max(5, Number(count) || 5)
+    );
 
-    const results = [];
+    if (!productName) {
+        throw new Error("Product name is required.");
+    }
+
+    const results = new Array(count);
+
     let nextIndex = 0;
 
     async function worker() {
 
-        while (nextIndex < count) {
+        while (true) {
 
             const index = nextIndex++;
+
+            if (index >= count) break;
 
             try {
 
@@ -144,18 +219,21 @@ async function generateImages(
             } catch (error) {
 
                 console.error(
-                    "Image generation error:",
+                    `Gemini image generation error [${index}]:`,
                     error.message
                 );
 
                 results[index] = {
                     success: false,
-                    angle: angles[index]
+                    angle: angles[index % angles.length],
+                    error: error.message
                 };
-
             }
         }
     }
+
+
+    // Keep the original 3 parallel workers.
 
     await Promise.all([
         worker(),
@@ -165,6 +243,7 @@ async function generateImages(
 
     return results;
 }
+
 
 module.exports = {
     generateImages,
