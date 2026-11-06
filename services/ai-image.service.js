@@ -247,5 +247,5 @@ async function generateImages(
 
 module.exports = {
     generateImages,
-    generateOneImage
+    generateOneImage,
 };
