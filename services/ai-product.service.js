@@ -37,17 +37,34 @@ function validateImage(imageFile) {
 }
 
 
+// Extract real citations returned by Google Search.
 function getSources(response) {
-    const chunks =
-        response.candidates?.[0]?.groundingMetadata
-            ?.groundingChunks || [];
+    const sources = [];
 
-    return chunks
-        .filter(item => item.web?.uri)
-        .map(item => ({
-            title: item.web.title || "",
-            url: item.web.uri
-        }));
+    for (const step of response.steps || []) {
+        if (step.type !== "model_output") continue;
+
+        for (const content of step.content || []) {
+            for (const annotation of content.annotations || []) {
+                if (annotation.type === "url_citation") {
+                    const url = annotation.uri || annotation.url;
+
+                    if (url) {
+                        sources.push({
+                            title: annotation.title || "",
+                            url
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    return [
+        ...new Map(
+            sources.map(source => [source.url, source])
+        ).values()
+    ];
 }
 
 
@@ -101,37 +118,31 @@ Confidence must be between 0 and 1.
 Do not invent source URLs.
 `;
 
-    const response = await googleAI.models.generateContent({
+    // Gemini Interactions API
+    const response = await googleAI.interactions.create({
 
         model: TEXT_MODEL,
 
-        contents: [
+        input: [
             {
-                role: "user",
-                parts: [
-                    {
-                        text: prompt
-                    },
-                    {
-                        inlineData: {
-                            mimeType: imageFile.mimetype,
-                            data: imageBase64
-                        }
-                    }
-                ]
+                type: "text",
+                text: prompt
+            },
+            {
+                type: "image",
+                data: imageBase64,
+                mime_type: imageFile.mimetype
             }
         ],
 
-        config: {
-            tools: [
-                {
-                    googleSearch: {}
-                }
-            ]
-        }
+        tools: [
+            {
+                type: "google_search"
+            }
+        ]
     });
 
-    const result = extractJSON(response.text);
+    const result = extractJSON(response.output_text);
 
     if (
         !result.productName ||
@@ -144,7 +155,6 @@ Do not invent source URLs.
         );
     }
 
-    // Only use sources actually returned by Google Search grounding.
     result.sources = getSources(response);
 
     return result;
@@ -182,29 +192,25 @@ Return ONLY valid JSON:
 }
 `;
 
-    const response = await googleAI.models.generateContent({
+    // Gemini Interactions API
+    const response = await googleAI.interactions.create({
 
         model: TEXT_MODEL,
 
-        contents: [
+        input: [
             {
-                role: "user",
-                parts: [
-                    {
-                        text: prompt
-                    },
-                    {
-                        inlineData: {
-                            mimeType: imageFile.mimetype,
-                            data: imageBase64
-                        }
-                    }
-                ]
+                type: "text",
+                text: prompt
+            },
+            {
+                type: "image",
+                data: imageBase64,
+                mime_type: imageFile.mimetype
             }
         ]
     });
 
-    const result = extractJSON(response.text);
+    const result = extractJSON(response.output_text);
 
     if (
         !result.productName ||

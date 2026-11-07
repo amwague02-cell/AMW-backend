@@ -10,7 +10,7 @@ const googleAI = new GoogleGenAI({
 });
 
 const TEXT_MODEL =
-    process.env.GEMINI_TEXT_MODEL || "gemini-3-flash-preview";
+    process.env.GEMINI_TEXT_MODEL || "gemini-3.8-flash";
 
 const IMAGE_MODEL =
     process.env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image";
