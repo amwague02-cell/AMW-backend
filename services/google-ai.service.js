@@ -6,7 +6,8 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 const googleAI = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY
+    apiKey: process.env.GEMINI_API_KEY,
+    apiVersion: "v1beta"
 });
 
 const TEXT_MODEL =
