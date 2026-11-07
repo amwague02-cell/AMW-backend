@@ -1,12 +1,14 @@
 
 const { GoogleGenAI } = require("@google/genai");
 
-if (!process.env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is missing from environment.");
+const API_KEY = process.env.GEMINI_API_KEY;
+
+if (!API_KEY) {
+    throw new Error("GEMINI_API_KEY is missing.");
 }
 
 const googleAI = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
+    apiKey: API_KEY,
     apiVersion: "v1beta"
 });
 

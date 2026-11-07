@@ -39,10 +39,9 @@ function validateImage(req, res) {
    ANALYSER LE PRODUIT
 ========================================= */
 
+
 async function analyze(req, res) {
-
     try {
-
         if (!validateImage(req, res)) return;
 
         const categoryResult = await pool.query(`
@@ -66,16 +65,17 @@ async function analyze(req, res) {
         });
 
     } catch (error) {
-
         console.error("AI analysis:", error);
 
-        return res.status(500).json({
+        const statusCode = error.statusCode || 500;
+
+        return res.status(statusCode).json({
             success: false,
-            message: error.message ||
-                "Erreur pendant l'analyse du produit."
+            message: error.message
         });
     }
 }
+
 
 
 /* =========================================

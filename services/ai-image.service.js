@@ -174,76 +174,106 @@ No text, no watermark, no fake logos.
    GENERATE MULTIPLE IMAGES
 ========================================= */
 
+
 async function generateImages(
     imageFile,
     productName,
     count = 5,
     direction = ""
 ) {
-
-    count = Math.min(
-        10,
-        Math.max(5, Number(count) || 5)
-    );
+    count = Math.min(10, Math.max(5, Number(count) || 5));
 
     if (!productName) {
         throw new Error("Product name is required.");
     }
 
-    const results = new Array(count);
+    const results = [];
 
-    let nextIndex = 0;
+    for (let index = 0; index < count; index++) {
+        try {
+            const image = await generateOneImage(
+                imageFile,
+                productName,
+                direction,
+                index
+            );
 
-    async function worker() {
+            results.push({
+                success: true,
+                ...image
+            });
 
-        while (true) {
+        } catch (error) {
+            const quotaError =
+                error.status === 429 ||
+                error.statusCode === 429 ||
+                error.message?.includes("RESOURCE_EXHAUSTED");
 
-            const index = nextIndex++;
+            results.push({
+                success: false,
+                angle: angles[index % angles.length],
+                error: error.message
+            });
 
-            if (index >= count) break;
-
-            try {
-
-                const image = await generateOneImage(
-                    imageFile,
-                    productName,
-                    direction,
-                    index
-                );
-
-                results[index] = {
-                    success: true,
-                    ...image
-                };
-
-            } catch (error) {
-
-                console.error(
-                    `Gemini image generation error [${index}]:`,
-                    error.message
-                );
-
-                results[index] = {
-                    success: false,
-                    angle: angles[index % angles.length],
-                    error: error.message
-                };
+            if (quotaError) {
+                // Stop sending requests when quota is exhausted.
+                break;
             }
         }
     }
 
-
-    // Keep the original 3 parallel workers.
-
-    await Promise.all([
-        worker(),
-        worker(),
-        worker()
-    ]);
-
     return results;
 }
 
+async function generateImages(
+    imageFile,
+    productName,
+    count = 5,
+    direction = ""
+) {
+    count = Math.min(10, Math.max(5, Number(count) || 5));
+
+    if (!productName) {
+        throw new Error("Product name is required.");
+    }
+
+    const results = [];
+
+    for (let index = 0; index < count; index++) {
+        try {
+            const image = await generateOneImage(
+                imageFile,
+                productName,
+                direction,
+                index
+            );
+
+            results.push({
+                success: true,
+                ...image
+            });
+
+        } catch (error) {
+            const quotaError =
+                error.status === 429 ||
+                error.statusCode === 429 ||
+                error.message?.includes("RESOURCE_EXHAUSTED");
+
+            results.push({
+                success: false,
+                angle: angles[index % angles.length],
+                error: error.message
+            });
+
+            if (quotaError) {
+                // Stop sending requests when quota is exhausted.
+                break;
+            }
+        }
+    }
+
+    return results;
+}
 
 module.exports = {
     generateImages,

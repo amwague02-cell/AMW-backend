@@ -22,7 +22,11 @@ function extractJSON(text) {
         throw new Error("Impossible de lire l'analyse du produit.");
     }
 
-    return JSON.parse(cleaned.slice(start, end + 1));
+    try {
+        return JSON.parse(cleaned.slice(start, end + 1));
+    } catch {
+        throw new Error("La réponse de Gemini contient un JSON invalide.");
+    }
 }
 
 
@@ -31,15 +35,19 @@ function validateImage(imageFile) {
         throw new Error("Image du produit obligatoire.");
     }
 
-    if (!imageFile.mimetype.startsWith("image/")) {
-        throw new Error("Format d'image invalide.");
+    const allowedTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+    ];
+
+    if (!allowedTypes.includes(imageFile.mimetype)) {
+        throw new Error("Format accepté : JPEG, PNG ou WEBP.");
     }
 }
 
 
-// Extract real citations returned by Google Search.
 function getSources(response) {
-
     const chunks =
         response.candidates?.[0]?.groundingMetadata
             ?.groundingChunks || [];
@@ -60,16 +68,97 @@ function getSources(response) {
 }
 
 
+// Centralized Gemini error handling
+function handleGeminiError(error) {
+    const status =
+        error.status ||
+        error.statusCode ||
+        error.code;
+
+    console.error("Gemini API error:", {
+        status,
+        message: error.message
+    });
+
+    if (Number(status) === 429 ||
+        error.message?.includes("RESOURCE_EXHAUSTED")) {
+        const quotaError = new Error(
+            "Le quota Gemini est atteint. Veuillez réessayer plus tard ou vérifier votre forfait API."
+        );
+
+        quotaError.statusCode = 429;
+        throw quotaError;
+    }
+
+    if (Number(status) === 503 ||
+        Number(status) === 504) {
+        const serviceError = new Error(
+            "Le service Gemini est temporairement indisponible. Réessayez dans quelques instants."
+        );
+
+        serviceError.statusCode = 503;
+        throw serviceError;
+    }
+
+    const apiError = new Error(
+        "Impossible de communiquer avec le service Gemini."
+    );
+
+    apiError.statusCode = 502;
+    throw apiError;
+}
+
+
+// Common image analysis request
+async function requestGemini(imageFile, prompt, useSearch = false) {
+    const imageBase64 = imageFile.buffer.toString("base64");
+
+    const config = {};
+
+    if (useSearch) {
+        config.tools = [
+            {
+                googleSearch: {}
+            }
+        ];
+    }
+
+    try {
+        return await googleAI.models.generateContent({
+            model: TEXT_MODEL,
+
+            contents: [
+                {
+                    role: "user",
+                    parts: [
+                        {
+                            text: prompt
+                        },
+                        {
+                            inlineData: {
+                                mimeType: imageFile.mimetype,
+                                data: imageBase64
+                            }
+                        }
+                    ]
+                }
+            ],
+
+            config
+        });
+
+    } catch (error) {
+        handleGeminiError(error);
+    }
+}
+
+
 /* =========================================
    ANALYSER UN PRODUIT
 ========================================= */
 
 async function analyzeProduct(imageFile, categories = []) {
-
     validateImage(imageFile);
-
-    const imageBase64 =
-        imageFile.buffer.toString("base64");
 
     const prompt = `
 You are an expert e-commerce product analyst for A.M.W,
@@ -81,16 +170,15 @@ TASKS:
 
 1. Identify the product accurately.
 2. Research its identity and characteristics online
-   using Google Search when possible.
+   using Google Search when available.
 3. Suggest the most appropriate category.
 4. Write a professional French marketing description.
 5. The description MUST contain at least 100 French words.
 6. Never invent technical specifications, brands or features.
-7. Do not claim unverified characteristics as facts.
-8. Use natural professional French suitable for
-   an e-commerce store in Senegal.
-9. Distinguish visually observed features from
-   information verified online.
+7. Never present unverified characteristics as facts.
+8. Use natural professional French suitable for Senegal.
+9. Distinguish visually observed features from verified information.
+10. If the product identity is uncertain, explain the uncertainty.
 
 Existing categories:
 ${categories.join(", ")}
@@ -110,34 +198,11 @@ Confidence must be between 0 and 1.
 Do not invent source URLs.
 `;
 
-    // Gemini Interactions API
-    const response = await googleAI.models.generateContent({
-
-    model: TEXT_MODEL,
-
-    contents: [
-        {
-            role: "user",
-            parts: [
-                { text: prompt },
-                {
-                    inlineData: {
-                        mimeType: imageFile.mimetype,
-                        data: imageBase64
-                    }
-                }
-            ]
-        }
-    ],
-
-    config: {
-        tools: [
-            {
-                googleSearch: {}
-            }
-        ]
-    }
-});
+    const response = await requestGemini(
+        imageFile,
+        prompt,
+        true
+    );
 
     const result = extractJSON(response.text);
 
@@ -152,6 +217,17 @@ Do not invent source URLs.
         );
     }
 
+    result.confidence = Math.max(
+        0,
+        Math.min(1, Number(result.confidence) || 0)
+    );
+
+    result.identifiedFeatures =
+        Array.isArray(result.identifiedFeatures)
+            ? result.identifiedFeatures
+            : [];
+
+    // Only real sources returned by Google grounding
     result.sources = getSources(response);
 
     return result;
@@ -163,11 +239,7 @@ Do not invent source URLs.
 ========================================= */
 
 async function analyzeImageForSearch(imageFile) {
-
     validateImage(imageFile);
-
-    const imageBase64 =
-        imageFile.buffer.toString("base64");
 
     const prompt = `
 Identify the product in this image for an e-commerce search.
@@ -178,6 +250,7 @@ Rules:
 - Do not invent technical specifications.
 - Use French product terminology.
 - Generate useful shopping search terms.
+- Mention uncertainty when necessary.
 
 Return ONLY valid JSON:
 
@@ -189,26 +262,11 @@ Return ONLY valid JSON:
 }
 `;
 
-    // Gemini Interactions API
-    const response = await googleAI.models.generateContent({
-
-    model: TEXT_MODEL,
-
-    contents: [
-        {
-            role: "user",
-            parts: [
-                { text: prompt },
-                {
-                    inlineData: {
-                        mimeType: imageFile.mimetype,
-                        data: imageBase64
-                    }
-                }
-            ]
-        }
-    ]
-});
+    const response = await requestGemini(
+        imageFile,
+        prompt,
+        false
+    );
 
     const result = extractJSON(response.text);
 
