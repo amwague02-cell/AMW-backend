@@ -841,13 +841,18 @@ async function updateOffer(req, res) {
         } = req.body;
 
 
-        if (!product_name || !category || !new_price) {
-
+        if (
+            !product_name?.trim() ||
+            !category?.trim() ||
+            new_price === undefined ||
+            new_price === null ||
+            !Number.isFinite(Number(new_price)) ||
+            Number(new_price) <= 0
+        ) {
             return res.status(400).json({
                 success: false,
-                message: "Informations obligatoires manquantes."
+                message: "Le nom, la catégorie et un prix valide sont obligatoires."
             });
-
         }
 
 
