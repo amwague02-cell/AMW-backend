@@ -821,11 +821,10 @@ async function getCategories(req, res) {
 ===================================================== */
 
 async function updateOffer(req, res) {
-
     const client = await pool.connect();
+    const uploadedImages = [];
 
     try {
-
         const { id } = req.params;
 
         const {
@@ -840,12 +839,10 @@ async function updateOffer(req, res) {
             status
         } = req.body;
 
-
         if (
             !product_name?.trim() ||
             !category?.trim() ||
             new_price === undefined ||
-            new_price === null ||
             !Number.isFinite(Number(new_price)) ||
             Number(new_price) <= 0
         ) {
@@ -855,104 +852,140 @@ async function updateOffer(req, res) {
             });
         }
 
+        const files = req.files || [];
 
-        const existingOffer =
-            await client.query(
-                `
-                SELECT id
-                FROM offers
-                WHERE id = $1
-                `,
-                [id]
-            );
+        await client.query("BEGIN");
 
+        const existing = await client.query(
+            `
+            SELECT id
+            FROM offers
+            WHERE id = $1
+            FOR UPDATE
+            `,
+            [id]
+        );
 
-        if (existingOffer.rows.length === 0) {
+        if (!existing.rows.length) {
+            await client.query("ROLLBACK");
 
             return res.status(404).json({
                 success: false,
                 message: "Offre introuvable."
             });
-
         }
 
+        const imageCount = await client.query(
+            `
+            SELECT COUNT(*)::int AS total
+            FROM offer_images
+            WHERE offer_id = $1
+            `,
+            [id]
+        );
 
-        const result =
+        if (imageCount.rows[0].total + files.length > 8) {
+            await client.query("ROLLBACK");
+
+            return res.status(400).json({
+                success: false,
+                message: "Maximum 8 images autorisées."
+            });
+        }
+
+        await client.query(
+            `
+            UPDATE offers
+            SET
+                product_name = $1,
+                category = $2,
+                description = $3,
+                old_price = $4,
+                discount = $5,
+                new_price = $6,
+                wholesale_price = $7,
+                quantity = $8,
+                status = $9
+            WHERE id = $10
+            `,
+            [
+                product_name.trim(),
+                category.trim(),
+                description || "",
+                old_price || null,
+                discount || 0,
+                new_price,
+                wholesale_price || null,
+                quantity || 0,
+                status || "active",
+                id
+            ]
+        );
+
+        // رفع الصور الجديدة وحفظها
+        let nextOrder = imageCount.rows[0].total;
+
+        for (const file of files) {
+            const result = await uploadToCloudinary(file);
+
+            uploadedImages.push(result.public_id);
+
             await client.query(
                 `
-                UPDATE offers
-
-                SET
-                    product_name = $1,
-                    category = $2,
-                    description = $3,
-                    old_price = $4,
-                    discount = $5,
-                    new_price = $6,
-                    wholesale_price = $7,
-                    quantity = $8,
-                    status = $9
-
-                WHERE id = $10
-
-                RETURNING
-                    id,
-                    reference,
-                    product_name,
-                    category,
-                    description,
-                    old_price,
-                    discount,
-                    new_price,
-                    wholesale_price,
-                    quantity,
-                    status,
-                    created_at
+                INSERT INTO offer_images (
+                    offer_id,
+                    cloudinary_public_id,
+                    image_url,
+                    resource_type,
+                    is_main,
+                    sort_order
+                )
+                VALUES ($1, $2, $3, $4, $5, $6)
                 `,
                 [
-                    product_name,
-                    category,
-                    description || "",
-                    old_price || null,
-                    discount || 0,
-                    new_price,
-                    wholesale_price || null,
-                    quantity || 0,
-                    status || "active",
-                    id
+                    id,
+                    result.public_id,
+                    result.secure_url,
+                    result.resource_type || "image",
+                    nextOrder === 0,
+                    nextOrder
                 ]
             );
 
+            nextOrder++;
+        }
+
+        await client.query("COMMIT");
 
         return res.json({
             success: true,
-            message: "Offre modifiée avec succès.",
-            offer: result.rows[0]
+            message: "Offre modifiée avec succès."
         });
 
-    }
+    } catch (error) {
+        try {
+            await client.query("ROLLBACK");
+        } catch (_) {}
 
-    catch (error) {
+        // تنظيف الصور التي رُفعت إذا فشلت عملية الحفظ
+        for (const publicId of uploadedImages) {
+            try {
+                await cloudinary.uploader.destroy(publicId, {
+                    resource_type: "image"
+                });
+            } catch (_) {}
+        }
 
-        console.error(
-            "❌ Update offer error:",
-            error
-        );
+        console.error("UPDATE OFFER ERROR:", error);
 
         return res.status(500).json({
             success: false,
-            message:
-                "Erreur lors de la modification de l'offre."
+            message: "Erreur lors de la modification de l'offre."
         });
 
-    }
-
-    finally {
-
+    } finally {
         client.release();
-
     }
-
 }
 
 
@@ -1131,6 +1164,87 @@ async function deleteOffer(req, res) {
 }
 
 
+/* =====================================================
+   DELETE ONE OFFER IMAGE
+===================================================== */
+
+async function deleteOfferImage(req, res) {
+    try {
+        const { id, imageId } = req.params;
+
+        const result = await pool.query(
+            `
+            SELECT id, cloudinary_public_id, resource_type, is_main
+            FROM offer_images
+            WHERE id = $1 AND offer_id = $2
+            `,
+            [imageId, id]
+        );
+
+        if (!result.rows.length) {
+            return res.status(404).json({
+                success: false,
+                message: "Image introuvable."
+            });
+        }
+
+        const image = result.rows[0];
+
+        // Supprimer de PostgreSQL
+        await pool.query(
+            `DELETE FROM offer_images WHERE id = $1`,
+            [imageId]
+        );
+
+        // Supprimer de Cloudinary
+        try {
+            await cloudinary.uploader.destroy(
+                image.cloudinary_public_id,
+                {
+                    resource_type: image.resource_type || "image"
+                }
+            );
+        } catch (cloudError) {
+            console.error(
+                "Cloudinary image deletion error:",
+                cloudError
+            );
+        }
+
+        // Choisir une nouvelle image principale si nécessaire
+        if (image.is_main) {
+            await pool.query(
+                `
+                UPDATE offer_images
+                SET is_main = TRUE
+                WHERE id = (
+                    SELECT id
+                    FROM offer_images
+                    WHERE offer_id = $1
+                    ORDER BY sort_order ASC, id ASC
+                    LIMIT 1
+                )
+                `,
+                [id]
+            );
+        }
+
+        return res.json({
+            success: true,
+            message: "Image supprimée avec succès."
+        });
+
+    } catch (error) {
+        console.error("DELETE OFFER IMAGE ERROR:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Erreur lors de la suppression de l'image."
+        });
+    }
+}
+
+
 module.exports = {
     createOffer,
     createAIOffer,
@@ -1138,5 +1252,6 @@ module.exports = {
     getOfferById,
     getCategories,
     updateOffer,
-    deleteOffer
+    deleteOffer,
+    deleteOfferImage
 };

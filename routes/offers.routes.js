@@ -15,7 +15,8 @@ const {
     getOfferById,
     getCategories,
     updateOffer,
-    deleteOffer
+    deleteOffer,
+    deleteOfferImage
 } = require("../controllers/offers.controller");
 
 const multer = require("multer");
@@ -109,9 +110,15 @@ router.get(
 router.put(
     "/:id",
     requireAdmin,
+    upload.array("images", 8),
     updateOffer
 );
 
+router.delete(
+    "/:id/images/:imageId",
+    requireAdmin,
+    deleteOfferImage
+);
 
 /* =====================================================
    DELETE OFFER — ADMIN + PASSWORD
